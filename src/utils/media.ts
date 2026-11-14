@@ -297,6 +297,42 @@ export function extractMediaFromGraphql(payload: unknown): CapturedMedia[] {
   return Array.from(found.values());
 }
 
+/** Syndication token used by X's public tweet-result endpoint. */
+export function syndicationToken(tweetId: string): string {
+  const numeric = Number(tweetId);
+  if (!Number.isFinite(numeric) || numeric <= 0) return '';
+  return ((numeric / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '');
+}
+
+export function syndicationEndpoint(tweetId: string): string {
+  return `https://cdn.syndication.twimg.com/tweet-result?id=${encodeURIComponent(tweetId)}&lang=en&token=${syndicationToken(tweetId)}`;
+}
+
+/**
+ * Public fallback for posts whose GraphQL response was not captured.
+ * Works for public posts only; protected and age-gated posts fail upstream.
+ */
+export function extractMediaFromSyndication(payload: unknown, tweetId: string): CapturedMedia[] {
+  const data = payload as any;
+  const author: string | undefined = data?.user?.screen_name;
+  const list: RawMediaObject[] = Array.isArray(data?.mediaDetails)
+    ? data.mediaDetails
+    : data?.video
+      ? [data.video]
+      : [];
+
+  const out: CapturedMedia[] = [];
+  const seen = new Set<string>();
+  for (const raw of list) {
+    const media = toCapturedMedia(raw, { tweetId, author });
+    if (media && !seen.has(media.id)) {
+      seen.add(media.id);
+      out.push(media);
+    }
+  }
+  return out;
+}
+
 /** Turn a captured media record into something the downloader can use. */
 export function capturedToScraped(
   media: CapturedMedia,

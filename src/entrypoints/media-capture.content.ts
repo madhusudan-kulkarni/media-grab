@@ -1,23 +1,39 @@
+import { extractMediaFromGraphql } from '~/utils/media';
+import type { CapturedMedia } from '~/utils/media';
+
 /**
  * MAIN-world capture for X/Twitter.
  *
  * X plays video through MediaSource, so the <video> element only exposes a
- * blob: URL. The real variants live in the GraphQL JSON the page already
+ * blob: URL. The real variants live in GraphQL responses the page already
  * fetched. This script runs before the app boots, watches fetch + XHR, and
- * forwards media records to the isolated world over postMessage.
+ * forwards normalized media to the isolated world over postMessage.
  *
- * Phase 0: proves the page-context hook works in Firefox. The GraphQL walker
- * lands in Phase 1.
+ * Messages carry a nonce handed over by the isolated bridge, so page scripts
+ * cannot forge capture traffic.
  */
-import { extractMediaFromGraphql } from '~/utils/media';
-
 export default defineContentScript({
   matches: ['*://x.com/*', '*://twitter.com/*'],
   runAt: 'document_start',
   world: 'MAIN',
   main() {
     const CHANNEL = '__mediagrab';
+    let nonce: string | null = null;
     let reportedCapture = false;
+    const pending: CapturedMedia[] = [];
+
+    const post = (payload: Record<string, unknown>) => {
+      window.postMessage({ [CHANNEL]: 1, ...payload }, window.location.origin);
+    };
+
+    const sendMedia = (items: CapturedMedia[]) => {
+      if (!items.length) return;
+      if (!nonce) {
+        pending.push(...items);
+        return;
+      }
+      post({ type: 'media', nonce, items });
+    };
 
     const handlePayload = (json: unknown) => {
       const items = extractMediaFromGraphql(json);
@@ -28,10 +44,23 @@ export default defineContentScript({
         console.info(`[MediaGrab] capture working: ${items.length} media item(s) in one response`);
       }
 
-      window.postMessage({ [CHANNEL]: 1, type: 'media', items }, window.location.origin);
+      sendMedia(items);
     };
 
-    window.postMessage({ [CHANNEL]: 1, type: 'capture-ready' }, window.location.origin);
+    window.addEventListener('message', (event) => {
+      if (event.source !== window) return;
+      const data = event.data;
+      if (!data || data[CHANNEL] !== 1) return;
+
+      if (data.type === 'bridge-ready' && typeof data.nonce === 'string') {
+        nonce = data.nonce;
+        if (pending.length) {
+          sendMedia(pending.splice(0, pending.length));
+        }
+      }
+    });
+
+    post({ type: 'capture-ready' });
     console.info('[MediaGrab] main-world capture active');
 
     const originalFetch = window.fetch;
@@ -74,4 +103,3 @@ export default defineContentScript({
     };
   },
 });
-

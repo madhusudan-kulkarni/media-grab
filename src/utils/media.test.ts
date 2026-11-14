@@ -5,6 +5,9 @@ import {
   formatDuration,
   parseDimensionsFromUrl,
   pickMp4Variant,
+  extractMediaFromSyndication,
+  syndicationEndpoint,
+  syndicationToken,
 } from './media';
 
 const tweetWithVideo = {
@@ -235,5 +238,55 @@ describe('formatDuration', () => {
     expect(formatDuration(12345)).toBe('0:12');
     expect(formatDuration(125000)).toBe('2:05');
     expect(formatDuration(undefined)).toBe('');
+  });
+});
+
+describe('syndication fallback', () => {
+  const payload = {
+    id_str: '1600649710662213632',
+    user: { screen_name: 'CTVJLaidlaw' },
+    mediaDetails: [
+      {
+        type: 'video',
+        media_url_https: 'https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/thumb.jpg',
+        original_info: { width: 720, height: 1280 },
+        video_info: {
+          duration_millis: 32200,
+          variants: [
+            {
+              bitrate: 0,
+              content_type: 'application/x-mpegURL',
+              url: 'https://video.twimg.com/1/pu/pl/master.m3u8',
+            },
+            {
+              bitrate: 2176000,
+              content_type: 'video/mp4',
+              url: 'https://video.twimg.com/1/pu/vid/720x1280/high.mp4',
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  it('reads mediaDetails that have no media_key', () => {
+    const media = extractMediaFromSyndication(payload, '1600649710662213632');
+    expect(media).toHaveLength(1);
+    expect(media[0]).toMatchObject({
+      kind: 'video',
+      tweetId: '1600649710662213632',
+      author: 'CTVJLaidlaw',
+      durationMs: 32200,
+    });
+  });
+
+  it('resolves the best playable mp4', () => {
+    const [media] = extractMediaFromSyndication(payload, '1');
+    expect(capturedToScraped(media!, 'best').src).toContain('720x1280');
+  });
+
+  it('derives the documented public token', () => {
+    expect(syndicationToken('1600649710662213632')).toBe('3vol7tqmapv');
+    expect(syndicationEndpoint('1600649710662213632')).toContain('token=3vol7tqmapv');
   });
 });

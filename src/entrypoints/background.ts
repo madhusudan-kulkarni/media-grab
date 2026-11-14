@@ -2,6 +2,12 @@ import JSZip from 'jszip';
 import { settings } from '~/utils/storage';
 import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import {
+  capturedToScraped,
+  extractMediaFromSyndication,
+  syndicationEndpoint,
+} from '~/utils/media';
+import type { ScrapedMedia, VideoQuality } from '~/utils/media';
+import {
   formatFilename,
   getTimestamp,
   extractDomain,
@@ -33,6 +39,13 @@ export default defineBackground(() => {
   browser.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === 'fast-save-image' && info.srcUrl) {
       await downloadImage(info.srcUrl, tab?.title);
+      return;
+    }
+
+    if (info.menuItemId === 'fast-save-video' && info.srcUrl) {
+      if (!info.srcUrl.startsWith('blob:')) {
+        await downloadImage(info.srcUrl, tab?.title);
+      }
       return;
     }
 
@@ -76,6 +89,24 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'mediagrab:download' && message.media) {
+      downloadMedia(message.media, message.pageTitle).then((res) => {
+        sendResponse(res);
+      }).catch((err) => {
+        sendResponse({ ok: false, error: String(err) });
+      });
+      return true;
+    }
+
+    if (message.type === 'mediagrab:resolve-tweet' && message.tweetId) {
+      resolveTweetMedia(String(message.tweetId)).then((items) => {
+        sendResponse({ ok: true, items });
+      }).catch((err) => {
+        sendResponse({ ok: false, error: String(err) });
+      });
+      return true;
+    }
+
     if (message.type === 'get-settings') {
       Promise.all([
         settings.filenameTemplate.getValue(),
@@ -110,6 +141,19 @@ function setupContextMenus() {
         id: 'fast-save-image',
         title: 'MediaGrab: Save Image',
         contexts: ['image'],
+      },
+      () => {
+        if (browser.runtime.lastError) {
+          // Silently ignore
+        }
+      }
+    );
+
+    browser.contextMenus.create(
+      {
+        id: 'fast-save-video',
+        title: 'MediaGrab: Save Video',
+        contexts: ['video'],
       },
       () => {
         if (browser.runtime.lastError) {
@@ -161,6 +205,58 @@ async function downloadImage(
     filename,
     saveAs: false,
   });
+}
+
+async function downloadMedia(
+  media: ScrapedMedia,
+  pageTitle?: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!media?.src) {
+    return { ok: false, error: 'No source URL' };
+  }
+  if (media.unsupported === 'hls-only') {
+    return { ok: false, error: 'This post is HLS-only. Support lands in 2.1.' };
+  }
+
+  const template = await settings.filenameTemplate.getValue();
+  const timestamp = getTimestamp();
+  const ext = media.ext || 'mp4';
+  const originalName = media.tweetId
+    ? `${media.author || 'x'}_${media.tweetId}`
+    : getOriginalName(media.src);
+
+  const filename = formatFilename(template, {
+    originalName,
+    ext,
+    domain: extractDomain(media.src),
+    timestamp,
+    index: 1,
+    pageTitle,
+    width: media.width,
+    height: media.height,
+    author: media.author,
+    tweetId: media.tweetId,
+    mediaId: media.id,
+  });
+
+  await browser.downloads.download({
+    url: media.src,
+    filename,
+    saveAs: false,
+    conflictAction: 'uniquify',
+  });
+
+  return { ok: true };
+}
+
+async function resolveTweetMedia(tweetId: string): Promise<ScrapedMedia[]> {
+  const quality = (await settings.videoQuality.getValue()) as VideoQuality;
+  const response = await fetch(syndicationEndpoint(tweetId));
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return extractMediaFromSyndication(payload, tweetId).map((media) =>
+    capturedToScraped(media, quality, `https://x.com/i/status/${tweetId}`)
+  );
 }
 
 async function fetchImageBuffer(src: string): Promise<{ data: ArrayBuffer | string; isBase64: boolean } | null> {
