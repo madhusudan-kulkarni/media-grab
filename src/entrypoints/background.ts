@@ -19,8 +19,14 @@ import {
 
 export default defineBackground(() => {
   // Register context menus on install / update to prevent duplicate ID errors
-  browser.runtime.onInstalled.addListener(() => {
+  browser.runtime.onInstalled.addListener((details) => {
     setupContextMenus();
+
+    // Firefox MV3 makes host access opt-in. Nothing runs until it is granted,
+    // so a fresh install goes straight to the one-click enable page.
+    if (details.reason === 'install') {
+      browser.tabs.create({ url: browser.runtime.getURL('/welcome.html') }).catch(() => {});
+    }
   });
 
   // Re-verify context menus on service worker startup safely

@@ -621,6 +621,34 @@ async function mountPopup(container: HTMLElement) {
 
   app.append(header, heroBtn, statusError, settingsCard, templateCard, footer);
   container.appendChild(app);
+
+  const granted = await browser.permissions.contains({ origins: ['<all_urls>'] });
+  if (!granted) {
+    const banner = document.createElement('div');
+    banner.style.cssText =
+      'margin:0 0 10px;padding:10px 12px;border:1px solid #fecdd3;border-radius:10px;background:#fff1f2;' +
+      'color:#9f1239;font:12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
+      'display:flex;align-items:center;gap:10px;';
+
+    const message = document.createElement('span');
+    message.style.flex = '1';
+    message.textContent = 'Site access is off, so save buttons cannot run.';
+
+    const enable = document.createElement('button');
+    enable.type = 'button';
+    enable.textContent = 'Enable';
+    enable.style.cssText =
+      'appearance:none;border:none;border-radius:7px;padding:5px 10px;background:#9f1239;color:#fff;' +
+      'font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;';
+
+    enable.addEventListener('click', async () => {
+      const ok = await browser.permissions.request({ origins: ['<all_urls>'] });
+      if (ok) banner.remove();
+    });
+
+    banner.append(message, enable);
+    container.prepend(banner);
+  }
 }
 
 function createSwitch(initial: boolean, onChange: (value: boolean) => void): HTMLElement {
