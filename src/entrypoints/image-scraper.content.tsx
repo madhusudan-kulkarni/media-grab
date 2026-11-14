@@ -4,7 +4,6 @@ import { getFileExtension, getOriginalName } from '~/utils/filename';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
-  cssInjectionMode: 'ui',
   async main(ctx) {
     let hoverOverlayEnabled = await settings.hoverOverlayEnabled.getValue();
     let minHoverSize = await settings.minHoverSize.getValue();

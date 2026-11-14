@@ -23,10 +23,13 @@ interface ArticleMedia {
   images: string[];
 }
 
+console.info('[MediaGrab] bridge module loaded', location.href);
+
 export default defineContentScript({
   matches: ['*://x.com/*', '*://twitter.com/*'],
   runAt: 'document_start',
   async main() {
+    console.info('[MediaGrab] bridge main start');
     const nonce = crypto.randomUUID();
     // Photos and videos are kept apart on purpose: a post can carry both, and
     // letting a poster photo win is how you download a JPEG instead of a video.
