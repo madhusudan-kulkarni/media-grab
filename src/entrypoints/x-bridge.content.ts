@@ -111,15 +111,22 @@ export default defineContentScript({
       return groups.find((group) => group.querySelector('[data-testid="like"]')) || groups[0] || null;
     }
 
+    function hasMedia(article: Element): boolean {
+      return Boolean(
+        article.querySelector('video, [data-testid="tweetPhoto"], [data-testid="videoComponent"], [data-testid="tweetPhoto"] img')
+      );
+    }
+
     function scan() {
       if (!actionButtonEnabled) return;
 
       document.querySelectorAll('article[data-testid="tweet"]').forEach((article) => {
         // X re-renders action bars often; presence of the button is the source of truth.
         if (article.querySelector('.mg-action-wrap')) return;
+        if (!hasMedia(article)) return;
 
         const tweetId = tweetIdFromArticle(article);
-        if (!tweetId || !byTweet.has(tweetId)) return;
+        if (!tweetId) return;
 
         const group = actionGroup(article);
         if (!group) return;
