@@ -232,7 +232,7 @@ export default defineContentScript({
         const articles = Array.from(document.querySelectorAll('article'));
         articles.forEach((article) => {
           // X re-renders action bars often; presence of the button is the truth.
-          const existing = article.querySelector('.mg-action-wrap');
+          const existing = article.querySelector('.mg-media-btn');
           const media = articleMedia(article);
           if (!media) {
             existing?.remove();
@@ -249,7 +249,7 @@ export default defineContentScript({
         });
 
         const withMedia = articles.filter((article) => articleMedia(article)).length;
-        const summary = `${articles.length} article(s), ${withMedia} with media, ${document.querySelectorAll('.mg-action-wrap').length} button(s)`;
+        const summary = `${articles.length} article(s), ${withMedia} with media, ${document.querySelectorAll('.mg-media-btn').length} button(s)`;
         if (summary !== lastSummary) {
           lastSummary = summary;
           console.info(`[MediaGrab] scan: ${summary}`);
@@ -259,47 +259,82 @@ export default defineContentScript({
       }
     }
 
-    function setButtonState(button: HTMLButtonElement, state: 'idle' | 'busy' | 'done' | 'error', title?: string) {
-      button.innerHTML =
+    function setButtonState(button: HTMLElement, state: 'idle' | 'busy' | 'done' | 'error', title?: string) {
+      const icon =
         state === 'busy' ? ICON_BUSY : state === 'done' ? ICON_DONE : state === 'error' ? ICON_ERROR : ICON_IDLE;
-      button.style.color =
-        state === 'done' ? 'rgb(0, 186, 124)' : state === 'error' ? 'rgb(244, 33, 46)' : 'rgb(113, 118, 123)';
+      const color =
+        state === 'done' ? 'rgb(0, 186, 124)' : state === 'error' ? 'rgb(244, 33, 46)' : state === 'busy' ? 'rgb(29, 155, 240)' : '';
+
+      const current = button.querySelector('svg');
+      if (current) current.outerHTML = icon;
+      else button.insertAdjacentHTML('beforeend', icon);
+
+      button.querySelectorAll('svg').forEach((svg) => {
+        (svg as SVGElement).style.color = color;
+      });
+      button.style.color = color;
+      button.setAttribute('aria-label', title || 'Save media with MediaGrab');
       button.title = title || 'Save media (MediaGrab)';
     }
 
     function mountButton(group: Element, article: Element, info: TweetInfo) {
-      const wrap = document.createElement('div');
-      wrap.className = 'mg-action-wrap';
-      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;';
+      // Clone one of X's own action buttons so layout, hover disc and spacing
+      // are identical. A hand-built button gets collapsed or clipped by the
+      // action bar's layout rules.
+      const template =
+        group.querySelector('[data-testid="bookmark"]') ||
+        group.querySelector('[data-testid="share"]') ||
+        group.querySelector('[role="button"]');
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.setAttribute('aria-label', 'Save media with MediaGrab');
-      button.innerHTML = ICON_IDLE;
-      button.style.cssText =
-        'display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:0;padding:0;border:none;' +
-        'background:transparent;border-radius:9999px;cursor:pointer;color:rgb(113,118,123);transition:background .15s,color .15s;';
+      let button: HTMLElement;
+      if (template) {
+        button = template.cloneNode(true) as HTMLElement;
+        button.removeAttribute('data-testid');
+        button.removeAttribute('id');
+        button.removeAttribute('aria-haspopup');
+        button.removeAttribute('aria-expanded');
+        button.removeAttribute('aria-controls');
+        button.removeAttribute('aria-describedby');
+        button.querySelectorAll('[data-testid]').forEach((node) => node.removeAttribute('data-testid'));
+        button.setAttribute('role', 'button');
+        button.setAttribute('tabindex', '0');
+      } else {
+        const fallback = document.createElement('button');
+        fallback.type = 'button';
+        fallback.style.cssText =
+          'display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:0;padding:0;' +
+          'border:none;background:transparent;border-radius:9999px;cursor:pointer;';
+        button = fallback;
+      }
 
-      button.addEventListener('mouseenter', () => {
-        button.style.background = 'rgba(29,155,240,.1)';
-        button.style.color = 'rgb(29,155,240)';
-      });
-      button.addEventListener('mouseleave', () => {
-        button.style.background = 'transparent';
-        setButtonState(button, 'idle');
-      });
-      button.addEventListener('click', async (event) => {
+      button.classList.add('mg-media-btn');
+      button.style.cursor = 'pointer';
+      setButtonState(button, 'idle');
+
+      const activate = async (event: Event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (button.getAttribute('aria-disabled') === 'true') return;
         await handleSave(button, article, info);
+      };
+
+      button.addEventListener('click', activate);
+      button.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') activate(event);
       });
 
-      wrap.appendChild(button);
-      group.appendChild(wrap);
-      console.info(`[MediaGrab] button mounted for ${info.tweetId} (${articleMedia(article)?.kind})`);
+      if (template?.parentElement) template.after(button);
+      else group.appendChild(button);
+
+      requestAnimationFrame(() => {
+        const rect = button.getBoundingClientRect();
+        console.info(
+          `[MediaGrab] button mounted for ${info.tweetId} (${articleMedia(article)?.kind}) ${Math.round(rect.width)}x${Math.round(rect.height)}`
+        );
+      });
     }
 
-    async function handleSave(button: HTMLButtonElement, article: Element, info: TweetInfo) {
+    async function handleSave(button: HTMLElement, article: Element, info: TweetInfo) {
       const media = articleMedia(article);
       if (!media) {
         setButtonState(button, 'error', 'No media found for this post');
@@ -307,7 +342,7 @@ export default defineContentScript({
       }
 
       setButtonState(button, 'busy', 'Finding media…');
-      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
 
       try {
         const items = await mediaFor(article, info, media);
@@ -340,7 +375,7 @@ export default defineContentScript({
 
         openMenu(button, items);
       } finally {
-        button.disabled = false;
+        button.removeAttribute('aria-disabled');
         setTimeout(() => setButtonState(button, 'idle'), 1800);
       }
     }
@@ -436,7 +471,7 @@ export default defineContentScript({
     settings.xActionButton.watch((value) => {
       actionButtonEnabled = Boolean(value);
       if (!actionButtonEnabled) {
-        document.querySelectorAll('.mg-action-wrap').forEach((node) => node.remove());
+        document.querySelectorAll('.mg-media-btn').forEach((node) => node.remove());
       } else {
         queueScan();
       }
