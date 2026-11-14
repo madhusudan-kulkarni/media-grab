@@ -90,7 +90,7 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'mediagrab:download' && message.media) {
-      downloadMedia(message.media, message.pageTitle).then((res) => {
+      downloadMedia(message.media, message.pageTitle, Number(message.index) || 1).then((res) => {
         sendResponse(res);
       }).catch((err) => {
         sendResponse({ ok: false, error: String(err) });
@@ -209,7 +209,8 @@ async function downloadImage(
 
 async function downloadMedia(
   media: ScrapedMedia,
-  pageTitle?: string
+  pageTitle?: string,
+  index = 1
 ): Promise<{ ok: boolean; error?: string }> {
   if (!media?.src) {
     return { ok: false, error: 'No source URL' };
@@ -230,7 +231,7 @@ async function downloadMedia(
     ext,
     domain: extractDomain(media.src),
     timestamp,
-    index: 1,
+    index,
     pageTitle,
     width: media.width,
     height: media.height,

@@ -290,3 +290,90 @@ describe('syndication fallback', () => {
     expect(syndicationEndpoint('1600649710662213632')).toContain('token=3vol7tqmapv');
   });
 });
+
+describe('mixed and nested media', () => {
+  it('keeps a photo and a video from the same post apart', () => {
+    const tweet = {
+      data: {
+        tweetResult: {
+          result: {
+            rest_id: '900',
+            legacy: {
+              extended_entities: {
+                media: [
+                  {
+                    media_key: '3_900',
+                    type: 'photo',
+                    media_url_https: 'https://pbs.twimg.com/media/poster.jpg',
+                    original_info: { width: 1200, height: 675 },
+                  },
+                  {
+                    media_key: '7_900',
+                    type: 'video',
+                    media_url_https: 'https://pbs.twimg.com/ext_tw_video_thumb/900/pu/img/thumb.jpg',
+                    original_info: { width: 1280, height: 720 },
+                    video_info: {
+                      variants: [
+                        {
+                          bitrate: 2176000,
+                          content_type: 'video/mp4',
+                          url: 'https://video.twimg.com/900/pu/vid/avc1/1280x720/clip.mp4',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const kinds = extractMediaFromGraphql(tweet).map((media) => media.kind).sort();
+    expect(kinds).toEqual(['image', 'video']);
+  });
+
+  it('files quoted media under the quoted post id', () => {
+    const payload = {
+      data: {
+        tweetResult: {
+          result: {
+            rest_id: '1000',
+            legacy: { full_text: 'quoting' },
+            quoted_status_result: {
+              result: {
+                rest_id: '2000',
+                core: { user_results: { result: { legacy: { screen_name: 'quoted' } } } },
+                legacy: {
+                  extended_entities: {
+                    media: [
+                      {
+                        media_key: '7_2000',
+                        type: 'video',
+                        media_url_https: 'https://pbs.twimg.com/ext_tw_video_thumb/2000/pu/img/thumb.jpg',
+                        original_info: { width: 1280, height: 720 },
+                        video_info: {
+                          variants: [
+                            {
+                              bitrate: 832000,
+                              content_type: 'video/mp4',
+                              url: 'https://video.twimg.com/2000/pu/vid/avc1/640x360/clip.mp4',
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const [media] = extractMediaFromGraphql(payload);
+    expect(media).toMatchObject({ tweetId: '2000', author: 'quoted', kind: 'video' });
+  });
+});

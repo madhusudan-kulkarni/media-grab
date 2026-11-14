@@ -152,7 +152,8 @@ function hashUrl(url: string): string {
   return `url-${(hash >>> 0).toString(36)}`;
 }
 
-function addNameOrig(url: string): string {
+export function withOriginalSize(url: string): string {
+  if (!url) return url;
   if (/[?&]name=/.test(url)) return url.replace(/([?&])name=[^&]*/, '$1name=orig');
   return `${url}${url.includes('?') ? '&' : '?'}name=orig`;
 }
@@ -206,7 +207,7 @@ function toCapturedMedia(raw: RawMediaObject, context: { tweetId?: string; autho
       width,
       height,
       alt: raw.ext_alt_text,
-      variants: [{ url: addNameOrig(raw.media_url_https), mime: 'image/jpeg', width, height }],
+      variants: [{ url: withOriginalSize(raw.media_url_https), mime: 'image/jpeg', width, height }],
     };
   }
 
@@ -264,36 +265,44 @@ export function extractMediaFromGraphql(payload: unknown): CapturedMedia[] {
     if (!existing.tweetId && media.tweetId) found.set(media.id, media);
   };
 
-  const visit = (node: any) => {
-    if (!node || typeof node !== 'object') return;
-    if (seen.has(node)) return;
+  // Depth-first with the nearest tweet id and author carried down. Quoted and
+  // retweeted posts keep their own rest_id, so their media is filed under the
+  // post that actually shows it. The same post can carry both a photo and a
+  // video; both are returned and separated by the caller.
+  const stack: Array<{ node: any; tweetId?: string; author?: string }> = [{ node: payload }];
+
+  while (stack.length) {
+    const entry = stack.pop()!;
+    const node = entry.node;
+    if (!node || typeof node !== 'object' || seen.has(node)) continue;
     seen.add(node);
 
     if (Array.isArray(node)) {
-      node.forEach(visit);
-      return;
+      for (const child of node) stack.push({ node: child, tweetId: entry.tweetId, author: entry.author });
+      continue;
     }
 
-    // Tweet envelope: rest_id is the tweet id.
-    const tweetId = typeof node.rest_id === 'string' ? node.rest_id : undefined;
-    const tweetMedia = tweetId ? mediaArrayFromTweet(node) : [];
-    if (tweetMedia.length) {
-      const author = authorFromTweet(node);
-      tweetMedia.forEach((raw) => add(toCapturedMedia(raw, { tweetId, author })));
+    let tweetId = entry.tweetId;
+    if (typeof node.rest_id === 'string' && /^\d+$/.test(node.rest_id)) {
+      tweetId = node.rest_id;
+    } else if (!tweetId && typeof node.legacy?.id_str === 'string' && /^\d+$/.test(node.legacy.id_str)) {
+      tweetId = node.legacy.id_str;
     }
 
-    // Bare media object (covers tweet detail, search, quoted media).
-    if (node.media_key && node.type) {
-      add(toCapturedMedia(node, {}));
+    const author = entry.author || authorFromTweet(node);
+    const tweetMedia = mediaArrayFromTweet(node);
+    for (const raw of tweetMedia) {
+      add(toCapturedMedia(raw, { tweetId, author }));
     }
 
-    Object.keys(node).forEach((key) => {
+    for (const key of Object.keys(node)) {
       const value = node[key];
-      if (value && typeof value === 'object') visit(value);
-    });
-  };
+      if (value && typeof value === 'object') {
+        stack.push({ node: value, tweetId, author });
+      }
+    }
+  }
 
-  visit(payload);
   return Array.from(found.values());
 }
 

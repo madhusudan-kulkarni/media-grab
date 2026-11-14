@@ -1,4 +1,4 @@
-import { capturedToScraped, formatDuration } from '~/utils/media';
+import { capturedToScraped, formatDuration, withOriginalSize } from '~/utils/media';
 import type { CapturedMedia, ScrapedMedia, VideoQuality } from '~/utils/media';
 import { settings } from '~/utils/storage';
 
@@ -7,14 +7,30 @@ const ICON_IDLE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="current
 const ICON_BUSY = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-opacity=".25"/><path d="M20 12a8 8 0 0 0-8-8" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></path></svg>`;
 const ICON_DONE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M9.6 16.8 5.8 13l-1.4 1.4 5.2 5.2L21 8.2 19.6 6.8z"/></svg>`;
 const ICON_ERROR = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2 1 21h22L12 2Zm0 5.5 7.5 12.5h-15L12 7.5ZM11 10v5h2v-5h-2Zm0 6.5v2h2v-2h-2Z"/></svg>`;
+const PHOTO_URL_RE = /pbs\.twimg\.com\/(media|card_img)\//;
+const VIDEO_SELECTOR = '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, [data-testid="playButton"]';
+
+interface TweetInfo {
+  tweetId: string;
+  author?: string;
+}
+
+interface ArticleMedia {
+  kind: 'video' | 'image' | 'mixed';
+  images: string[];
+}
 
 export default defineContentScript({
   matches: ['*://x.com/*', '*://twitter.com/*'],
   runAt: 'document_start',
   async main() {
     const nonce = crypto.randomUUID();
-    const byTweet = new Map<string, CapturedMedia[]>();
+    // Photos and videos are kept apart on purpose: a post can carry both, and
+    // letting a poster photo win is how you download a JPEG instead of a video.
+    const videosByTweet = new Map<string, CapturedMedia[]>();
+    const photosByTweet = new Map<string, CapturedMedia[]>();
     const loose: CapturedMedia[] = [];
+
     let actionButtonEnabled = await settings.xActionButton.getValue();
     let scanQueued = false;
     let reportedIngest = false;
@@ -23,26 +39,38 @@ export default defineContentScript({
       window.postMessage({ [CHANNEL]: 1, ...payload }, window.location.origin);
     };
 
+    const pushUnique = (map: Map<string, CapturedMedia[]>, key: string, item: CapturedMedia) => {
+      const list = map.get(key) || [];
+      if (list.some((existing) => existing.id === item.id)) return false;
+      list.push(item);
+      map.set(key, list);
+      return true;
+    };
+
     const ingest = (items: CapturedMedia[]) => {
       let added = false;
       for (const item of items) {
         if (!item?.id) continue;
-        if (item.tweetId) {
-          const list = byTweet.get(item.tweetId) || [];
-          if (!list.some((existing) => existing.id === item.id)) {
-            list.push(item);
-            byTweet.set(item.tweetId, list);
+        if (!item.tweetId) {
+          if (!loose.some((existing) => existing.id === item.id)) {
+            loose.push(item);
             added = true;
           }
-        } else if (!loose.some((existing) => existing.id === item.id)) {
-          loose.push(item);
-          added = true;
+          continue;
+        }
+        if (item.kind === 'image') {
+          added = pushUnique(photosByTweet, item.tweetId, item) || added;
+        } else {
+          added = pushUnique(videosByTweet, item.tweetId, item) || added;
         }
       }
+
       if (added) {
         if (!reportedIngest) {
           reportedIngest = true;
-          console.info(`[MediaGrab] bridge indexed media for ${byTweet.size} tweet(s)`);
+          console.info(
+            `[MediaGrab] bridge indexed ${videosByTweet.size} video post(s), ${photosByTweet.size} photo post(s)`
+          );
         }
         queueScan();
       }
@@ -66,25 +94,100 @@ export default defineContentScript({
     });
 
     /* ---------------------------------------------------------------------
-       Resolve media for a tweet
+       DOM -> what is actually on screen
        ------------------------------------------------------------------ */
+
+    function tweetInfoFromArticle(article: Element): TweetInfo | null {
+      // The canonical link is the one wrapping <time>. Other /status/ links in
+      // a card can point at a quoted post or a media viewer.
+      const links = Array.from(article.querySelectorAll('a[href*="/status/"]'));
+      const parse = (link: Element) => {
+        const match = (link.getAttribute('href') || '').match(/^\/([^/]+)\/status\/(\d+)/);
+        return match ? { author: match[1]!, tweetId: match[2]! } : null;
+      };
+      for (const link of links) {
+        if (link.querySelector('time')) {
+          const info = parse(link);
+          if (info) return info;
+        }
+      }
+      for (const link of links) {
+        const info = parse(link);
+        if (info) return info;
+      }
+      const page = window.location.pathname.match(/^\/([^/]+)\/status\/(\d+)/);
+      return page ? { author: page[1]!, tweetId: page[2]! } : null;
+    }
+
+    /** What the article renders: video, images, or both. */
+    function articleMedia(article: Element): ArticleMedia | null {
+      const hasVideo = Boolean(article.querySelector(VIDEO_SELECTOR));
+      const images: string[] = [];
+
+      for (const img of article.querySelectorAll('[data-testid="tweetPhoto"] img, a[href*="/photo/"] img')) {
+        // X reuses the photo wrapper for video posters; those are not photos.
+        if (img.closest(VIDEO_SELECTOR)) continue;
+        const element = img as HTMLImageElement;
+        const src = element.currentSrc || element.src || '';
+        if (!PHOTO_URL_RE.test(src)) continue;
+        const original = withOriginalSize(src);
+        if (!images.includes(original)) images.push(original);
+      }
+
+      if (hasVideo && images.length) return { kind: 'mixed', images };
+      if (hasVideo) return { kind: 'video', images };
+      if (images.length) return { kind: 'image', images };
+      return null;
+    }
 
     async function quality(): Promise<VideoQuality> {
       return (await settings.videoQuality.getValue()) as VideoQuality;
     }
 
-    async function mediaForTweet(tweetId: string): Promise<ScrapedMedia[]> {
-      const q = await quality();
-      const captured = byTweet.get(tweetId);
-      if (captured?.length) {
-        return captured.map((item) => capturedToScraped(item, q));
-      }
-
+    async function resolveRemote(tweetId: string): Promise<ScrapedMedia[]> {
       const response = await browser.runtime.sendMessage({
         type: 'mediagrab:resolve-tweet',
         tweetId,
       });
       return response?.ok ? (response.items as ScrapedMedia[]) : [];
+    }
+
+    function photoToScraped(url: string, info: TweetInfo): ScrapedMedia {
+      return {
+        id: url,
+        kind: 'image',
+        src: withOriginalSize(url),
+        ext: 'jpg',
+        mimeType: 'image/jpeg',
+        width: 0,
+        height: 0,
+        author: info.author,
+        tweetId: info.tweetId,
+        source: 'dom',
+      };
+    }
+
+    async function mediaFor(article: Element, info: TweetInfo, media: ArticleMedia): Promise<ScrapedMedia[]> {
+      const q = await quality();
+
+      if (media.kind === 'video') {
+        const captured = videosByTweet.get(info.tweetId) || [];
+        if (captured.length) return captured.map((item) => capturedToScraped(item, q));
+        return (await resolveRemote(info.tweetId)).filter((item) => item.kind !== 'image');
+      }
+
+      if (media.kind === 'image') {
+        if (media.images.length) return media.images.map((url) => photoToScraped(url, info));
+        const captured = photosByTweet.get(info.tweetId) || [];
+        if (captured.length) return captured.map((item) => capturedToScraped(item, q));
+        return (await resolveRemote(info.tweetId)).filter((item) => item.kind === 'image');
+      }
+
+      const videos = videosByTweet.get(info.tweetId)?.map((item) => capturedToScraped(item, q)) || [];
+      const images = media.images.length
+        ? media.images.map((url) => photoToScraped(url, info))
+        : (photosByTweet.get(info.tweetId) || []).map((item) => capturedToScraped(item, q));
+      return [...videos, ...images];
     }
 
     /* ---------------------------------------------------------------------
@@ -94,16 +197,10 @@ export default defineContentScript({
     function queueScan() {
       if (scanQueued) return;
       scanQueued = true;
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         scanQueued = false;
         scan();
-      }, 250);
-    }
-
-    function tweetIdFromArticle(article: Element): string | undefined {
-      const link = article.querySelector('a[href*="/status/"]');
-      const href = link?.getAttribute('href') || '';
-      return href.match(/\/status\/(\d+)/)?.[1];
+      });
     }
 
     function actionGroup(article: Element): Element | null {
@@ -111,27 +208,25 @@ export default defineContentScript({
       return groups.find((group) => group.querySelector('[data-testid="like"]')) || groups[0] || null;
     }
 
-    function hasMedia(article: Element): boolean {
-      return Boolean(
-        article.querySelector('video, [data-testid="tweetPhoto"], [data-testid="videoComponent"], [data-testid="tweetPhoto"] img')
-      );
-    }
-
     function scan() {
       if (!actionButtonEnabled) return;
 
-      document.querySelectorAll('article[data-testid="tweet"]').forEach((article) => {
-        // X re-renders action bars often; presence of the button is the source of truth.
-        if (article.querySelector('.mg-action-wrap')) return;
-        if (!hasMedia(article)) return;
+      document.querySelectorAll('article').forEach((article) => {
+        // X re-renders action bars often; presence of the button is the truth.
+        const existing = article.querySelector('.mg-action-wrap');
+        const media = articleMedia(article);
+        if (!media) {
+          existing?.remove();
+          return;
+        }
+        if (existing) return;
 
-        const tweetId = tweetIdFromArticle(article);
-        if (!tweetId) return;
-
+        const info = tweetInfoFromArticle(article);
+        if (!info) return;
         const group = actionGroup(article);
         if (!group) return;
 
-        mountButton(group, tweetId);
+        mountButton(group, article, info);
       });
     }
 
@@ -140,10 +235,10 @@ export default defineContentScript({
         state === 'busy' ? ICON_BUSY : state === 'done' ? ICON_DONE : state === 'error' ? ICON_ERROR : ICON_IDLE;
       button.style.color =
         state === 'done' ? 'rgb(0, 186, 124)' : state === 'error' ? 'rgb(244, 33, 46)' : 'rgb(113, 118, 123)';
-      if (title) button.title = title;
+      button.title = title || 'Save media (MediaGrab)';
     }
 
-    function mountButton(group: Element, tweetId: string) {
+    function mountButton(group: Element, article: Element, info: TweetInfo) {
       const wrap = document.createElement('div');
       wrap.className = 'mg-action-wrap';
       wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;';
@@ -151,7 +246,6 @@ export default defineContentScript({
       const button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('aria-label', 'Save media with MediaGrab');
-      button.title = 'Save media (MediaGrab)';
       button.innerHTML = ICON_IDLE;
       button.style.cssText =
         'display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:0;padding:0;border:none;' +
@@ -163,27 +257,48 @@ export default defineContentScript({
       });
       button.addEventListener('mouseleave', () => {
         button.style.background = 'transparent';
-        setButtonState(button, 'idle', 'Save media (MediaGrab)');
+        setButtonState(button, 'idle');
       });
-
       button.addEventListener('click', async (event) => {
         event.preventDefault();
         event.stopPropagation();
-        await handleSave(button, tweetId);
+        await handleSave(button, article, info);
       });
 
       wrap.appendChild(button);
       group.appendChild(wrap);
     }
 
-    async function handleSave(button: HTMLButtonElement, tweetId: string) {
+    async function handleSave(button: HTMLButtonElement, article: Element, info: TweetInfo) {
+      const media = articleMedia(article);
+      if (!media) {
+        setButtonState(button, 'error', 'No media found for this post');
+        return;
+      }
+
       setButtonState(button, 'busy', 'Finding media…');
       button.disabled = true;
 
       try {
-        const items = await mediaForTweet(tweetId);
+        const items = await mediaFor(article, info, media);
+        console.info(
+          `[MediaGrab] save ${info.tweetId} (${media.kind}):`,
+          items.map((item) => `${item.kind}:${item.ext}`).join(', ') || 'nothing'
+        );
+
         if (!items.length) {
           setButtonState(button, 'error', 'No media found for this post');
+          return;
+        }
+
+        if (media.kind === 'image' && items.length > 1) {
+          let saved = 0;
+          for (let i = 0; i < items.length; i++) {
+            const result = await download(items[i]!, i + 1);
+            if (result.ok) saved++;
+            await new Promise((resolve) => setTimeout(resolve, 120));
+          }
+          setButtonState(button, saved ? 'done' : 'error', saved ? `Saved ${saved} images` : 'Download failed');
           return;
         }
 
@@ -194,18 +309,18 @@ export default defineContentScript({
         }
 
         openMenu(button, items);
-        setButtonState(button, 'idle', 'Choose media to save');
       } finally {
         button.disabled = false;
-        setTimeout(() => setButtonState(button, 'idle', 'Save media (MediaGrab)'), 1600);
+        setTimeout(() => setButtonState(button, 'idle'), 1800);
       }
     }
 
-    async function download(media: ScrapedMedia): Promise<{ ok: boolean; error?: string }> {
+    async function download(media: ScrapedMedia, index = 1): Promise<{ ok: boolean; error?: string }> {
       try {
         return await browser.runtime.sendMessage({
           type: 'mediagrab:download',
           media,
+          index,
           pageTitle: document.title,
         });
       } catch (error) {
@@ -221,8 +336,9 @@ export default defineContentScript({
 
       const menu = document.createElement('div');
       menu.className = 'mg-media-menu';
+      menu.setAttribute('role', 'menu');
       menu.style.cssText =
-        `position:fixed;z-index:2147483647;min-width:220px;padding:6px;border-radius:12px;` +
+        `position:fixed;z-index:2147483647;min-width:220px;max-width:300px;padding:6px;border-radius:12px;` +
         `background:${dark ? '#16181c' : '#fff'};color:${dark ? '#e7e9ea' : '#0f1419'};` +
         `border:1px solid ${dark ? '#2f3336' : '#e1e8ed'};box-shadow:0 8px 28px rgba(0,0,0,.28);` +
         `font:13px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;`;
@@ -230,8 +346,9 @@ export default defineContentScript({
       items.forEach((media, index) => {
         const entry = document.createElement('button');
         entry.type = 'button';
-        const label =
-          media.kind === 'gif' ? 'GIF' : media.kind === 'video' ? 'Video' : 'Photo';
+        entry.setAttribute('role', 'menuitem');
+
+        const label = media.kind === 'gif' ? 'GIF' : media.kind === 'video' ? 'Video' : 'Photo';
         const meta = [
           media.unsupported === 'hls-only' ? 'HLS only — unsupported' : '',
           formatDuration(media.durationMs),
@@ -254,14 +371,19 @@ export default defineContentScript({
           event.preventDefault();
           event.stopPropagation();
           closeMenu();
-          await download(media);
+          await download(media, index + 1);
         });
         menu.appendChild(entry);
       });
 
       document.body.appendChild(menu);
       const menuRect = menu.getBoundingClientRect();
-      menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menuRect.height - 8)}px`;
+      let top = rect.bottom + 6;
+      if (top + menuRect.height > window.innerHeight - 8) {
+        const above = rect.top - menuRect.height - 6;
+        top = above >= 8 ? above : window.innerHeight - menuRect.height - 8;
+      }
+      menu.style.top = `${Math.max(8, top)}px`;
       menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menuRect.width - 8))}px`;
 
       setTimeout(() => {
@@ -285,7 +407,6 @@ export default defineContentScript({
       actionButtonEnabled = Boolean(value);
       if (!actionButtonEnabled) {
         document.querySelectorAll('.mg-action-wrap').forEach((node) => node.remove());
-        document.querySelectorAll('[data-mediagrab="1"]').forEach((node) => node.removeAttribute('data-mediagrab'));
       } else {
         queueScan();
       }
@@ -301,11 +422,12 @@ export default defineContentScript({
       (async () => {
         const q = await quality();
         if (message.tweetId) {
-          sendResponse({ ok: true, items: byTweet.get(String(message.tweetId))?.map((m) => capturedToScraped(m, q)) || [] });
+          const items = [...(videosByTweet.get(String(message.tweetId)) || []), ...(photosByTweet.get(String(message.tweetId)) || [])];
+          sendResponse({ ok: true, items: items.map((m) => capturedToScraped(m, q)) });
           return;
         }
-        const all = [...byTweet.values()].flat().concat(loose).map((m) => capturedToScraped(m, q));
-        sendResponse({ ok: true, items: all });
+        const all = [...videosByTweet.values(), ...photosByTweet.values()].flat().concat(loose);
+        sendResponse({ ok: true, items: all.map((m) => capturedToScraped(m, q)) });
       })();
 
       return true;
@@ -313,7 +435,7 @@ export default defineContentScript({
 
     const observer = new MutationObserver(() => queueScan());
     const start = () => {
-      observer.observe(document.documentElement, { childList: true, subtree: true });
+      observer.observe(document.body, { childList: true, subtree: true });
       queueScan();
     };
 
