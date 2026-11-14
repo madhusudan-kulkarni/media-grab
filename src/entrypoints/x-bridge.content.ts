@@ -8,7 +8,10 @@ const ICON_BUSY = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" s
 const ICON_DONE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M9.6 16.8 5.8 13l-1.4 1.4 5.2 5.2L21 8.2 19.6 6.8z"/></svg>`;
 const ICON_ERROR = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2 1 21h22L12 2Zm0 5.5 7.5 12.5h-15L12 7.5ZM11 10v5h2v-5h-2Zm0 6.5v2h2v-2h-2Z"/></svg>`;
 const PHOTO_URL_RE = /pbs\.twimg\.com\/(media|card_img)\//;
-const VIDEO_SELECTOR = '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, [data-testid="playButton"]';
+const VIDEO_THUMB_RE = /(ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb|video_thumb)/;
+const VIDEO_SELECTOR =
+  '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="videoContainer"], ' +
+  '[data-testid="playButton"], video, [aria-label*="Play" i]';
 
 interface TweetInfo {
   tweetId: string;
@@ -34,6 +37,7 @@ export default defineContentScript({
     let actionButtonEnabled = await settings.xActionButton.getValue();
     let scanQueued = false;
     let reportedIngest = false;
+    let lastSummary = '';
 
     const post = (payload: Record<string, unknown>) => {
       window.postMessage({ [CHANNEL]: 1, ...payload }, window.location.origin);
@@ -77,6 +81,7 @@ export default defineContentScript({
     };
 
     post({ type: 'bridge-ready', nonce });
+    console.info('[MediaGrab] bridge active');
 
     window.addEventListener('message', (event) => {
       if (event.source !== window || event.origin !== window.location.origin) return;
@@ -121,18 +126,27 @@ export default defineContentScript({
 
     /** What the article renders: video, images, or both. */
     function articleMedia(article: Element): ArticleMedia | null {
-      const hasVideo = Boolean(article.querySelector(VIDEO_SELECTOR));
       const images: string[] = [];
+      const posters: string[] = [];
 
-      for (const img of article.querySelectorAll('[data-testid="tweetPhoto"] img, a[href*="/photo/"] img')) {
-        // X reuses the photo wrapper for video posters; those are not photos.
-        if (img.closest(VIDEO_SELECTOR)) continue;
+      for (const img of article.querySelectorAll('img')) {
         const element = img as HTMLImageElement;
         const src = element.currentSrc || element.src || '';
+        if (!src) continue;
+
+        // X often renders just the poster until the player mounts.
+        if (VIDEO_THUMB_RE.test(src)) {
+          posters.push(src);
+          continue;
+        }
+        if (img.closest(VIDEO_SELECTOR)) continue;
         if (!PHOTO_URL_RE.test(src)) continue;
+
         const original = withOriginalSize(src);
         if (!images.includes(original)) images.push(original);
       }
+
+      const hasVideo = posters.length > 0 || Boolean(article.querySelector(VIDEO_SELECTOR));
 
       if (hasVideo && images.length) return { kind: 'mixed', images };
       if (hasVideo) return { kind: 'video', images };
@@ -211,23 +225,35 @@ export default defineContentScript({
     function scan() {
       if (!actionButtonEnabled) return;
 
-      document.querySelectorAll('article').forEach((article) => {
-        // X re-renders action bars often; presence of the button is the truth.
-        const existing = article.querySelector('.mg-action-wrap');
-        const media = articleMedia(article);
-        if (!media) {
-          existing?.remove();
-          return;
+      try {
+        const articles = Array.from(document.querySelectorAll('article'));
+        articles.forEach((article) => {
+          // X re-renders action bars often; presence of the button is the truth.
+          const existing = article.querySelector('.mg-action-wrap');
+          const media = articleMedia(article);
+          if (!media) {
+            existing?.remove();
+            return;
+          }
+          if (existing) return;
+
+          const info = tweetInfoFromArticle(article);
+          if (!info) return;
+          const group = actionGroup(article);
+          if (!group) return;
+
+          mountButton(group, article, info);
+        });
+
+        const withMedia = articles.filter((article) => articleMedia(article)).length;
+        const summary = `${articles.length} article(s), ${withMedia} with media, ${document.querySelectorAll('.mg-action-wrap').length} button(s)`;
+        if (summary !== lastSummary) {
+          lastSummary = summary;
+          console.info(`[MediaGrab] scan: ${summary}`);
         }
-        if (existing) return;
-
-        const info = tweetInfoFromArticle(article);
-        if (!info) return;
-        const group = actionGroup(article);
-        if (!group) return;
-
-        mountButton(group, article, info);
-      });
+      } catch (error) {
+        console.error('[MediaGrab] scan failed', error);
+      }
     }
 
     function setButtonState(button: HTMLButtonElement, state: 'idle' | 'busy' | 'done' | 'error', title?: string) {
@@ -267,6 +293,7 @@ export default defineContentScript({
 
       wrap.appendChild(button);
       group.appendChild(wrap);
+      console.info(`[MediaGrab] button mounted for ${info.tweetId} (${articleMedia(article)?.kind})`);
     }
 
     async function handleSave(button: HTMLButtonElement, article: Element, info: TweetInfo) {
