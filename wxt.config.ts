@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   srcDir: 'src',
+  outDir: 'output',
   manifestVersion: 3,
   vite: () => ({
     plugins: [react()],

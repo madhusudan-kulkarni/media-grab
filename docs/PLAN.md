@@ -43,7 +43,7 @@ Firefox is the primary target: develop, test and dogfood there. Chrome is a seco
 | Browser | Status | Notes |
 | --- | --- | --- |
 | Firefox | Primary | Stable is the daily browser. Unsigned XPIs do not persist there, so releases are **signed as an unlisted AMO add-on** and installed as a signed XPI. Developer Edition remains the fast dev loop. Phase 0 confirms the build target, `world:'MAIN'`, and permission behavior. |
-| Chrome / Arc / Brave / Edge | Secondary | Load unpacked from `.output/chrome-mv3`; smoke test only. |
+| Chrome / Arc / Brave / Edge | Secondary | Load unpacked from `output/chrome-mv3`; smoke test only. |
 | Safari | Not planned | No `browser.downloads` API, so the download layer would need a fetch→blob→anchor fallback, plus an Xcode wrapper and unsigned-extension mode. Not worth it for occasional use. |
 
 Distribution: `wxt zip` → `web-ext sign --channel unlisted` → signed XPI attached to a GitHub Release. Chrome zip alongside it. `docs/INSTALL.md` covers dragging the signed XPI into Firefox, the Developer Edition path, and the temporary `about:debugging` fallback.

@@ -22,11 +22,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type check and test
+        run: |
+          pnpm exec tsc --noEmit
+          pnpm test
 
       - name: Package Chrome extension
         run: pnpm run zip
@@ -34,26 +39,25 @@ jobs:
       - name: Package Firefox extension
         run: pnpm run zip:firefox
 
+      - name: Sign Firefox extension (unlisted)
+        if: env.AMO_API_KEY != '' && env.AMO_API_SECRET != ''
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          npx web-ext sign \
+            --source-dir output/firefox-mv3 \
+            --artifacts-dir output/signed \
+            --channel unlisted \
+            --api-key "$AMO_API_KEY" \
+            --api-secret "$AMO_API_SECRET"
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            .output/*-chrome.zip
-            .output/*-firefox.zip
-            .output/*-sources.zip
+            output/*-chrome.zip
+            output/*-firefox.zip
+            output/*-sources.zip
+            output/signed/*.xpi
           generate_release_notes: true
-
-      - name: Submit to Mozilla Add-ons (AMO)
-        if: env.FIREFOX_JWT_ISSUER != '' && env.FIREFOX_JWT_SECRET != ''
-        env:
-          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
-          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
-        run: |
-          pnpm wxt submit \
-            --firefox-zip .output/imagegrab-firefox.zip \
-            --firefox-sources-zip $(ls .output/*-sources.zip | head -n 1) \
-            --firefox-extension-id 'image-grab' \
-            --firefox-jwt-issuer "$FIREFOX_JWT_ISSUER" \
-            --firefox-jwt-secret "$FIREFOX_JWT_SECRET" \
-            --firefox-channel listed
-
