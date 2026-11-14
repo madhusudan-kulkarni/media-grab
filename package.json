@@ -1,8 +1,8 @@
 {
-  "name": "imagegrab",
-  "version": "1.1.0",
+  "name": "mediagrab",
+  "version": "2.0.0",
   "type": "module",
-  "description": "Quickly save images from any webpage in single click or ZIP batch",
+  "description": "Save images, GIFs and videos from any page",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/madhusudan-kulkarni/image-grab.git"
@@ -30,21 +30,27 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
-    "submit:firefox": "wxt submit --firefox-zip .output/imagegrab-firefox.zip --firefox-sources-zip .output/imagegrab-1.1.0-sources.zip --firefox-extension-id image-grab --firefox-channel listed",
     "icons": "node scripts/generate-icons.js",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sign:firefox": "wxt zip -b firefox && web-ext sign --source-dir .output/firefox-mv3 --artifacts-dir .output/signed --channel unlisted"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
     "@types/jszip": "^3.4.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",
     "sharp": "^0.35.3",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "wxt": "^0.20.17"
+    "vitest": "^5.1.0",
+    "wxt": "^0.21.5"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }

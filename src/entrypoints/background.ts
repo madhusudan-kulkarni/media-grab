@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
-import { settings, ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
+import { settings } from '~/utils/storage';
+import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import {
   formatFilename,
   getTimestamp,
@@ -107,7 +108,7 @@ function setupContextMenus() {
     browser.contextMenus.create(
       {
         id: 'fast-save-image',
-        title: 'ImageGrab: Save Image',
+        title: 'MediaGrab: Save Image',
         contexts: ['image'],
       },
       () => {
@@ -120,7 +121,7 @@ function setupContextMenus() {
     browser.contextMenus.create(
       {
         id: 'fast-save-image-batch',
-        title: 'ImageGrab: Save Page Images',
+        title: 'MediaGrab: Save Page Images',
         contexts: ['page', 'image'],
       },
       () => {
@@ -204,6 +205,7 @@ async function downloadBatchZip(
 
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
+    if (!img) continue;
     const ext = img.ext || getFileExtension(img.src);
     const originalName = img.originalName || getOriginalName(img.src);
 
@@ -269,6 +271,7 @@ async function downloadBatchIndividual(
 
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
+    if (!img) continue;
     const ext = img.ext || getFileExtension(img.src);
     const originalName = img.originalName || getOriginalName(img.src);
 
@@ -312,7 +315,7 @@ async function openBatchModalOnTab(tabId: number): Promise<void> {
   try {
     await browser.scripting.executeScript({
       target: { tabId },
-      files: ['content-scripts/image-scraper.js'],
+      files: ['/content-scripts/image-scraper.js'],
     });
 
     await browser.tabs.sendMessage(tabId, { type: 'open-batch-modal' });

@@ -55,10 +55,10 @@ export function getBatchFolderName(options: {
 
   const subName = pageSlug ? `${pageSlug}_${dateStr}` : `${dateStr}_${timeStr}`;
 
-  const folderPath = `ImageGrab/${safeDomain}/${subName}/`;
+  const folderPath = `MediaGrab/${safeDomain}/${subName}/`;
   const zipFilename = pageSlug
-    ? `ImageGrab_${safeDomain}_${pageSlug}_${dateStr}.zip`
-    : `ImageGrab_${safeDomain}_${timestamp}.zip`;
+    ? `MediaGrab_${safeDomain}_${pageSlug}_${dateStr}.zip`
+    : `MediaGrab_${safeDomain}_${timestamp}.zip`;
 
   return { folderPath, zipFilename };
 }

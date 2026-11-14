@@ -1,4 +1,5 @@
-import { settings, ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
+import { settings } from '~/utils/storage';
+import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import { getFileExtension, getOriginalName } from '~/utils/filename';
 
 export default defineContentScript({
@@ -31,7 +32,7 @@ export default defineContentScript({
     });
 
     const ui = await createShadowRootUi(ctx, {
-      name: 'imagegrab-ui-root',
+      name: 'mediagrab-ui-root',
       position: 'inline',
       anchor: 'html',
       onMount: (container) => {
@@ -285,7 +286,7 @@ function createFloatingHoverButton(
 ) {
   const btn = document.createElement('button');
   btn.className = 'ig-floating-btn';
-  btn.title = 'Save Image (ImageGrab)';
+  btn.title = 'Save Image (MediaGrab)';
   btn.innerHTML = `
     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
       <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>

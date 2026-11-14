@@ -1,4 +1,5 @@
-import { settings, HoverKeyModifier } from '~/utils/storage';
+import { settings } from '~/utils/storage';
+import type { HoverKeyModifier } from '~/utils/storage';
 import { formatFilename, getTimestamp } from '~/utils/filename';
 
 const root = document.getElementById('root');
@@ -364,7 +365,7 @@ async function mountPopup(container: HTMLElement) {
         <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
       </svg>
     </div>
-    <h1 class="title">ImageGrab</h1>
+    <h1 class="title">MediaGrab</h1>
   `;
 
   const headerRight = document.createElement('div');
