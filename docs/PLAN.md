@@ -1,6 +1,6 @@
 # MediaGrab 2.0 — overhaul and media-grabbing plan
 
-Status: approved in principle; Phase 0 can start.
+Status: Phase 0 and Phase 1 complete on Firefox stable. Phase 2 next.
 Research: `docs/research/` (market-reviews, feature-matrix, technical-feasibility, ux-patterns).
 
 Personal-use build: distributed as zips on GitHub Releases, not published to extension stores.

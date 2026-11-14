@@ -18,6 +18,7 @@ export default defineContentScript({
   world: 'MAIN',
   main() {
     const CHANNEL = '__mediagrab';
+    const DEBUG = false;
     let nonce: string | null = null;
     let reportedCapture = false;
     const pending: CapturedMedia[] = [];
@@ -41,7 +42,7 @@ export default defineContentScript({
 
       if (!reportedCapture) {
         reportedCapture = true;
-        console.info(`[MediaGrab] capture working: ${items.length} media item(s) in one response`);
+        if (DEBUG) console.info(`[MediaGrab] capture working: ${items.length} media item(s) in one response`);
       }
 
       sendMedia(items);
@@ -61,7 +62,7 @@ export default defineContentScript({
     });
 
     post({ type: 'capture-ready' });
-    console.info('[MediaGrab] main-world capture active');
+    if (DEBUG) console.info('[MediaGrab] main-world capture active');
 
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {

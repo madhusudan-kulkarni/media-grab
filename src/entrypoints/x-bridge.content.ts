@@ -3,6 +3,10 @@ import type { CapturedMedia, ScrapedMedia, VideoQuality } from '~/utils/media';
 import { settings } from '~/utils/storage';
 
 const CHANNEL = '__mediagrab';
+const DEBUG = false;
+const log = (...args: unknown[]) => {
+  if (DEBUG) console.info('[MediaGrab]', ...args);
+};
 const ICON_IDLE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4L11 13.6V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v1.5A1.5 1.5 0 0 1 18.5 22h-13A1.5 1.5 0 0 1 4 20.5V19a1 1 0 0 1 1-1Z"/></svg>`;
 const ICON_BUSY = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-opacity=".25"/><path d="M20 12a8 8 0 0 0-8-8" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></path></svg>`;
 const ICON_DONE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M9.6 16.8 5.8 13l-1.4 1.4 5.2 5.2L21 8.2 19.6 6.8z"/></svg>`;
@@ -23,13 +27,13 @@ interface ArticleMedia {
   images: string[];
 }
 
-console.info('[MediaGrab] bridge module loaded', location.href);
+log('bridge module loaded', location.href);
 
 export default defineContentScript({
   matches: ['*://x.com/*', '*://twitter.com/*'],
   runAt: 'document_start',
   async main() {
-    console.info('[MediaGrab] bridge main start');
+    log('bridge main start');
     const nonce = crypto.randomUUID();
     // Photos and videos are kept apart on purpose: a post can carry both, and
     // letting a poster photo win is how you download a JPEG instead of a video.
@@ -75,16 +79,14 @@ export default defineContentScript({
       if (added) {
         if (!reportedIngest) {
           reportedIngest = true;
-          console.info(
-            `[MediaGrab] bridge indexed ${videosByTweet.size} video post(s), ${photosByTweet.size} photo post(s)`
-          );
+          log(`bridge indexed ${videosByTweet.size} video post(s), ${photosByTweet.size} photo post(s)`);
         }
         queueScan();
       }
     };
 
     post({ type: 'bridge-ready', nonce });
-    console.info('[MediaGrab] bridge active');
+    log('bridge active');
 
     window.addEventListener('message', (event) => {
       if (event.source !== window || event.origin !== window.location.origin) return;
@@ -252,7 +254,7 @@ export default defineContentScript({
         const summary = `${articles.length} article(s), ${withMedia} with media, ${document.querySelectorAll('.mg-media-btn').length} button(s)`;
         if (summary !== lastSummary) {
           lastSummary = summary;
-          console.info(`[MediaGrab] scan: ${summary}`);
+          log(`scan: ${summary}`);
         }
       } catch (error) {
         console.error('[MediaGrab] scan failed', error);
@@ -328,9 +330,7 @@ export default defineContentScript({
 
       requestAnimationFrame(() => {
         const rect = button.getBoundingClientRect();
-        console.info(
-          `[MediaGrab] button mounted for ${info.tweetId} (${articleMedia(article)?.kind}) ${Math.round(rect.width)}x${Math.round(rect.height)}`
-        );
+        log(`button mounted for ${info.tweetId} (${articleMedia(article)?.kind}) ${Math.round(rect.width)}x${Math.round(rect.height)}`);
       });
     }
 
@@ -346,10 +346,7 @@ export default defineContentScript({
 
       try {
         const items = await mediaFor(article, info, media);
-        console.info(
-          `[MediaGrab] save ${info.tweetId} (${media.kind}):`,
-          items.map((item) => `${item.kind}:${item.ext}`).join(', ') || 'nothing'
-        );
+        log(`save ${info.tweetId} (${media.kind}):`, items.map((item) => `${item.kind}:${item.ext}`).join(', ') || 'nothing');
 
         if (!items.length) {
           setButtonState(button, 'error', 'No media found for this post');
