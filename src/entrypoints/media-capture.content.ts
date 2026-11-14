@@ -9,14 +9,30 @@
  * Phase 0: proves the page-context hook works in Firefox. The GraphQL walker
  * lands in Phase 1.
  */
+import { extractMediaFromGraphql } from '~/utils/media';
+
 export default defineContentScript({
   matches: ['*://x.com/*', '*://twitter.com/*'],
   runAt: 'document_start',
   world: 'MAIN',
   main() {
     const CHANNEL = '__mediagrab';
+    let reportedCapture = false;
+
+    const handlePayload = (json: unknown) => {
+      const items = extractMediaFromGraphql(json);
+      if (!items.length) return;
+
+      if (!reportedCapture) {
+        reportedCapture = true;
+        console.info(`[MediaGrab] capture working: ${items.length} media item(s) in one response`);
+      }
+
+      window.postMessage({ [CHANNEL]: 1, type: 'media', items }, window.location.origin);
+    };
 
     window.postMessage({ [CHANNEL]: 1, type: 'capture-ready' }, window.location.origin);
+    console.info('[MediaGrab] main-world capture active');
 
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {
@@ -27,17 +43,7 @@ export default defineContentScript({
           response
             .clone()
             .json()
-            .then((json) => {
-              window.postMessage(
-                {
-                  [CHANNEL]: 1,
-                  type: 'graphql-response',
-                  url,
-                  json,
-                },
-                window.location.origin
-              );
-            })
+            .then(handlePayload)
             .catch(() => {});
         }
       } catch {
@@ -59,19 +65,13 @@ export default defineContentScript({
         const url = (this as any).__mediagrabUrl as string | undefined;
         if (!url || !url.includes('/graphql/')) return;
         try {
-          const json = JSON.parse(this.responseText);
-          window.postMessage({ [CHANNEL]: 1, type: 'graphql-response', url, json }, window.location.origin);
+          handlePayload(JSON.parse(this.responseText));
         } catch {
           // Not JSON; ignore.
         }
       });
       return originalSend.apply(this, args as any);
     };
-
-    console.info('[MediaGrab] main-world capture active');
-
-    if (import.meta.env.DEV) {
-      console.debug('[MediaGrab] document_start reached');
-    }
   },
 });
+
