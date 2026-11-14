@@ -17,6 +17,7 @@ export default defineContentScript({
     const loose: CapturedMedia[] = [];
     let actionButtonEnabled = await settings.xActionButton.getValue();
     let scanQueued = false;
+    let reportedIngest = false;
 
     const post = (payload: Record<string, unknown>) => {
       window.postMessage({ [CHANNEL]: 1, ...payload }, window.location.origin);
@@ -38,7 +39,13 @@ export default defineContentScript({
           added = true;
         }
       }
-      if (added) queueScan();
+      if (added) {
+        if (!reportedIngest) {
+          reportedIngest = true;
+          console.info(`[MediaGrab] bridge indexed media for ${byTweet.size} tweet(s)`);
+        }
+        queueScan();
+      }
     };
 
     post({ type: 'bridge-ready', nonce });
