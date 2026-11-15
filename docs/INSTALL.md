@@ -64,6 +64,17 @@ If an update does not appear, reinstall the new XPI — that always works.
 Chrome has no unlisted signing path; keep using the unpacked build. Host access
 is requested at install, unlike Firefox.
 
+## YouTube
+
+YouTube downloads go through a native host that runs yt-dlp. Install it after the extension:
+
+```bash
+brew install yt-dlp ffmpeg
+pnpm native:install
+```
+
+Full details, security notes and troubleshooting: [NATIVE.md](NATIVE.md).
+
 ## Notes
 
 - Downloads go to the browser's normal download folder. Filename template,

@@ -40,4 +40,10 @@ export const settings = {
   xActionButton: storage.defineItem<boolean>('local:xActionButton', {
     fallback: true,
   }),
+  ytdlpOutputDir: storage.defineItem<string>('local:ytdlpOutputDir', {
+    fallback: '~/Downloads/MediaGrab/yt-dlp',
+  }),
+  ytdlpCookies: storage.defineItem<string>('local:ytdlpCookies', {
+    fallback: 'none',
+  }),
 };

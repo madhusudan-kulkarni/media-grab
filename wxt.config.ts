@@ -19,8 +19,8 @@ export default defineConfig({
   },
   manifest: {
     name: 'MediaGrab',
-    description: 'Save images, GIFs and videos from any page',
-    permissions: ['downloads', 'contextMenus', 'activeTab', 'scripting', 'storage'],
+    description: 'Save images, GIFs, videos and YouTube downloads',
+    permissions: ['downloads', 'contextMenus', 'activeTab', 'scripting', 'storage', 'nativeMessaging', 'notifications'],
     host_permissions: ['<all_urls>'],
     commands: {
       'open-gallery': {

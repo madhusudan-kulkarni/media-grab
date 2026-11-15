@@ -4,6 +4,9 @@ import type { VideoQuality } from '~/utils/storage';
 import { settings } from '~/utils/storage';
 import { countMedia, storeGalleryPayload } from '~/utils/gallery';
 import { Button, Mark, Row, Select, Switch } from '~/ui/primitives';
+import { isYoutubeUrl } from '~/utils/ytdlp';
+import type { YtdlpJob, YtdlpPing } from '~/utils/ytdlp';
+import { YoutubeCard } from './YoutubeCard';
 
 const COLLECT_TIMEOUT = 4000;
 
@@ -17,8 +20,14 @@ export default function Popup() {
   const [xButtonEnabled, setXButtonEnabled] = useState(true);
   const [quality, setQuality] = useState<VideoQuality>('best');
   const [busy, setBusy] = useState(false);
+  const [tabId, setTabId] = useState<number | undefined>();
+  const [tabUrl, setTabUrl] = useState('');
+  const [ytdlpPing, setYtdlpPing] = useState<YtdlpPing | null>(null);
+  const [ytdlpJob, setYtdlpJob] = useState<YtdlpJob | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const counts = countMedia(items);
+  const youtube = isYoutubeUrl(tabUrl);
   const version = browser.runtime.getManifest().version;
 
   useEffect(() => {
@@ -44,6 +53,60 @@ export default function Popup() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!youtube) return;
+
+    void refreshYtdlp();
+
+    const listener = (message: any) => {
+      if (message?.type !== 'mediagrab:ytdlp-update' || !message.job) return;
+      if (tabId !== undefined && message.job.tabId !== tabId) return;
+      setYtdlpJob(message.job as YtdlpJob);
+    };
+
+    browser.runtime.onMessage.addListener(listener);
+    return () => browser.runtime.onMessage.removeListener(listener);
+  }, [youtube, tabId]);
+
+  async function refreshYtdlp() {
+    try {
+      const ping = await browser.runtime.sendMessage({ type: 'mediagrab:ytdlp-ping' });
+      setYtdlpPing(
+        ping && typeof ping.ok === 'boolean'
+          ? ping
+          : { ok: false, error: 'No response from the helper' }
+      );
+
+      const jobs = await browser.runtime.sendMessage({ type: 'mediagrab:ytdlp-jobs' });
+      if (jobs?.ok && Array.isArray(jobs.jobs)) {
+        const list = jobs.jobs as YtdlpJob[];
+        const mine = (tabId !== undefined ? list.find((entry) => entry.tabId === tabId) : list[0]) || null;
+        setYtdlpJob(mine);
+      }
+    } catch {
+      setYtdlpPing({ ok: false, error: 'No response from the helper' });
+    }
+  }
+
+  async function startYoutube() {
+    if (!tabUrl || starting) return;
+    setStarting(true);
+    try {
+      const response = await browser.runtime.sendMessage({
+        type: 'mediagrab:ytdlp-start',
+        url: tabUrl,
+        quality,
+        title: tabTitle,
+        tabId,
+      });
+      if (!response?.ok) {
+        setYtdlpPing({ ok: false, error: response?.error || 'Could not start the download' });
+      }
+    } finally {
+      setStarting(false);
+    }
+  }
+
   async function scan() {
     setLoading(true);
     setError('');
@@ -51,8 +114,15 @@ export default function Popup() {
     try {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       setTabTitle(tab?.title || '');
+      setTabId(tab?.id);
+      setTabUrl(tab?.url || '');
       if (!tab?.id) {
         setError('No active tab.');
+        return;
+      }
+
+      if (isYoutubeUrl(tab.url)) {
+        setItems([]);
         return;
       }
 
@@ -113,7 +183,21 @@ export default function Popup() {
       )}
 
       <section className="px-4 pb-3">
-        {loading ? (
+        {youtube ? (
+          <YoutubeCard
+            ping={ytdlpPing}
+            job={ytdlpJob}
+            quality={quality}
+            starting={starting}
+            onQuality={(value) => {
+              setQuality(value);
+              void settings.videoQuality.setValue(value);
+            }}
+            onStart={startYoutube}
+            onRefresh={refreshYtdlp}
+            onDismissJob={() => setYtdlpJob(null)}
+          />
+        ) : loading ? (
           <div className="rounded-2xl border border-line bg-surface-2 px-4 py-5">
             <div className="h-3 w-24 animate-pulse rounded bg-line" />
             <div className="mt-3 h-7 w-16 animate-pulse rounded bg-line" />
@@ -155,6 +239,7 @@ export default function Popup() {
         )}
       </section>
 
+      {!youtube && (
       <div className="px-4 pb-2">
         <Button
           variant="primary"
@@ -181,6 +266,7 @@ export default function Popup() {
           </button>
         )}
       </div>
+      )}
 
       <div className="mx-4 mt-1 border-t border-line">
         <Row title="Hover save" hint="Button over images and videos">
@@ -203,23 +289,25 @@ export default function Popup() {
             }}
           />
         </Row>
-        <Row title="Video quality" hint="Applied to video posts">
-          <Select
-            aria-label="Video quality"
-            value={quality}
-            onChange={async (event) => {
-              const value = event.target.value as VideoQuality;
-              setQuality(value);
-              await settings.videoQuality.setValue(value);
-            }}
-          >
-            <option value="best">Best</option>
-            <option value="1080">1080p</option>
-            <option value="720">720p</option>
-            <option value="480">480p</option>
-            <option value="360">360p</option>
-          </Select>
-        </Row>
+        {!youtube && (
+          <Row title="Video quality" hint="Applied to video posts">
+            <Select
+              aria-label="Video quality"
+              value={quality}
+              onChange={async (event) => {
+                const value = event.target.value as VideoQuality;
+                setQuality(value);
+                await settings.videoQuality.setValue(value);
+              }}
+            >
+              <option value="best">Best</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+              <option value="360">360p</option>
+            </Select>
+          </Row>
+        )}
       </div>
 
       <footer className="mt-1 flex items-center justify-between border-t border-line px-4 py-2.5">

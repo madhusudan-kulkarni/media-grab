@@ -4,6 +4,7 @@ import { settings } from '~/utils/storage';
 import { clearHistory, getHistory } from '~/utils/history';
 import { formatFilename, getTimestamp } from '~/utils/filename';
 import { Button, cn, Mark, Row, Section, Select, Switch } from '~/ui/primitives';
+import type { YtdlpPing } from '~/utils/ytdlp';
 
 const DEFAULT_TEMPLATE = '${domain}_${timestamp}_${index}.${ext}';
 
@@ -29,6 +30,9 @@ export default function Options() {
   const [subfolder, setSubfolder] = useState(true);
   const [granted, setGranted] = useState(true);
   const [historyCount, setHistoryCount] = useState(0);
+  const [ytdlpPing, setYtdlpPing] = useState<YtdlpPing | null>(null);
+  const [ytdlpDir, setYtdlpDir] = useState('~/Downloads/MediaGrab/yt-dlp');
+  const [ytdlpCookies, setYtdlpCookies] = useState('none');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -40,6 +44,9 @@ export default function Options() {
       setSubfolder(await settings.batchSubfolder.getValue());
       setGranted(await browser.permissions.contains({ origins: ['<all_urls>'] }).catch(() => true));
       setHistoryCount((await getHistory()).length);
+      setYtdlpDir(await settings.ytdlpOutputDir.getValue());
+      setYtdlpCookies(await settings.ytdlpCookies.getValue());
+      await checkYtdlp();
     })();
   }, []);
 
@@ -64,6 +71,15 @@ export default function Options() {
     setTemplate(value);
     await settings.filenameTemplate.setValue(value || DEFAULT_TEMPLATE);
     flashSaved();
+  }
+
+  async function checkYtdlp() {
+    try {
+      const result = await browser.runtime.sendMessage({ type: 'mediagrab:ytdlp-ping' });
+      setYtdlpPing(result && typeof result.ok === 'boolean' ? result : { ok: false, error: 'No response' });
+    } catch {
+      setYtdlpPing({ ok: false, error: 'No response from the helper' });
+    }
   }
 
   function flashSaved() {
@@ -170,7 +186,7 @@ export default function Options() {
             </Row>
           </Section>
 
-          <Section title="Video" hint="Progressive MP4 renditions. HLS-only posts arrive in 2.1.">
+          <Section title="Video" hint="Progressive MP4; HLS-only posts use the yt-dlp helper.">
             <Row title="Preferred quality" hint="The closest rendition at or below this cap.">
               <Select
                 aria-label="Preferred video quality"
@@ -213,6 +229,71 @@ export default function Options() {
                   flashSaved();
                 }}
               />
+            </Row>
+          </Section>
+
+          <Section title="YouTube" hint="Runs yt-dlp on this Mac and merges audio with ffmpeg. Nothing is uploaded.">
+            <Row
+              title="Helper"
+              hint={
+                ytdlpPing?.ok
+                  ? `yt-dlp ${ytdlpPing.ytDlp || '?'} · ffmpeg ${ytdlpPing.ffmpeg ? 'ready' : 'missing'}`
+                  : ytdlpPing?.error || 'Checking…'
+              }
+            >
+              {ytdlpPing?.ok && ytdlpPing.ytDlp && ytdlpPing.ffmpeg ? (
+                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-soft">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ink-soft" />
+                  Ready
+                </span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" onClick={checkYtdlp}>
+                    Check
+                  </Button>
+                  <a
+                    href="https://github.com/madhusudan-kulkarni/media-grab/blob/main/docs/NATIVE.md"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11.5px] font-medium text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+                  >
+                    Setup
+                  </a>
+                </div>
+              )}
+            </Row>
+
+            <label className="block border-b border-line/70 py-2">
+              <span className="text-[12.5px] font-medium">Output folder</span>
+              <input
+                value={ytdlpDir}
+                onChange={(event) => setYtdlpDir(event.target.value)}
+                onBlur={async () => {
+                  await settings.ytdlpOutputDir.setValue(ytdlpDir || '~/Downloads/MediaGrab/yt-dlp');
+                  flashSaved();
+                }}
+                spellCheck={false}
+                className="mt-1.5 h-9 w-full rounded-lg border border-line bg-surface px-3 font-mono text-[12px] text-ink outline-none transition-colors focus:border-ink"
+              />
+            </label>
+
+            <Row title="Cookies from browser" hint="Only needed for private or age-restricted videos.">
+              <Select
+                aria-label="Cookies from browser"
+                value={ytdlpCookies}
+                onChange={async (event) => {
+                  setYtdlpCookies(event.target.value);
+                  await settings.ytdlpCookies.setValue(event.target.value);
+                  flashSaved();
+                }}
+              >
+                <option value="none">None</option>
+                <option value="firefox">Firefox</option>
+                <option value="chrome">Chrome</option>
+                <option value="safari">Safari</option>
+                <option value="edge">Edge</option>
+                <option value="brave">Brave</option>
+              </Select>
             </Row>
           </Section>
 

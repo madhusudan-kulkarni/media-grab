@@ -31,6 +31,13 @@ jobs:
       - name: Type check
         run: pnpm exec tsc --noEmit
 
+      - name: Check native host syntax
+        run: |
+          node --check native/host.mjs
+          node --check native/install.mjs
+          node --check native/uninstall.mjs
+          node --check native/lib/args.mjs
+
       - name: Unit tests
         run: pnpm test
 
