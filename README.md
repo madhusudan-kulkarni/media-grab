@@ -4,7 +4,7 @@ Save images, GIFs and videos from any page — one at a time or all at once. Bui
 
 <p>
   <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/install-guide-1d9bf0" alt="Install guide"></a>
-  <a href="https://github.com/madhusudan-kulkarni/image-grab/releases/latest"><img src="https://img.shields.io/github/v/release/madhusudan-kulkarni/image-grab?display_name=release" alt="Release"></a>
+  <a href="https://github.com/madhusudan-kulkarni/media-grab/releases/latest"><img src="https://img.shields.io/github/v/release/madhusudan-kulkarni/media-grab?display_name=release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-ISC-blue" alt="License"></a>
 </p>
 

@@ -236,7 +236,7 @@ export default function Popup() {
           Settings
         </Button>
         <a
-          href="https://github.com/madhusudan-kulkarni/image-grab"
+          href="https://github.com/madhusudan-kulkarni/media-grab"
           target="_blank"
           rel="noreferrer"
           className="rounded-md px-1.5 py-1 text-[11.5px] font-medium text-ink-soft transition-colors duration-150 hover:bg-surface-2 hover:text-ink"

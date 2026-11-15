@@ -53,7 +53,7 @@ export default defineConfig({
     browser_specific_settings: {
       gecko: {
         id: 'mediagrab@madhusudan.dev',
-        update_url: 'https://raw.githubusercontent.com/madhusudan-kulkarni/image-grab/main/updates.json',
+        update_url: 'https://raw.githubusercontent.com/madhusudan-kulkarni/media-grab/main/updates.json',
         data_collection_permissions: {
           required: ['none'],
         },

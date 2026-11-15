@@ -5,11 +5,11 @@
   "description": "Save images, GIFs and videos from any page",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/madhusudan-kulkarni/image-grab.git"
+    "url": "git+https://github.com/madhusudan-kulkarni/media-grab.git"
   },
-  "homepage": "https://github.com/madhusudan-kulkarni/image-grab#readme",
+  "homepage": "https://github.com/madhusudan-kulkarni/media-grab#readme",
   "bugs": {
-    "url": "https://github.com/madhusudan-kulkarni/image-grab/issues"
+    "url": "https://github.com/madhusudan-kulkarni/media-grab/issues"
   },
   "keywords": [
     "browser-extension",

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const version = process.argv[2] || pkg.version;
 const tag = process.argv[3] || `v${version}`;
-const repo = process.env.GITHUB_REPOSITORY || 'madhusudan-kulkarni/image-grab';
+const repo = process.env.GITHUB_REPOSITORY || 'madhusudan-kulkarni/media-grab';
 const addonId = 'mediagrab@madhusudan.dev';
 
 const updateLink = `https://github.com/${repo}/releases/download/${tag}/mediagrab-${version}.xpi`;

@@ -244,7 +244,7 @@ export default function Options() {
         <footer className="mt-6 flex items-center justify-between text-[11.5px] text-ink-soft">
           <span>Local only. No account, no telemetry.</span>
           <a
-            href="https://github.com/madhusudan-kulkarni/image-grab"
+            href="https://github.com/madhusudan-kulkarni/media-grab"
             target="_blank"
             rel="noreferrer"
             className="rounded-md px-1.5 py-1 transition-colors hover:bg-surface hover:text-ink"
