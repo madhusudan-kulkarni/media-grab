@@ -40,17 +40,17 @@ jobs:
         run: pnpm run zip:firefox
 
       - name: Sign Firefox extension (unlisted)
-        if: env.AMO_API_KEY != '' && env.AMO_API_SECRET != ''
+        if: env.FIREFOX_JWT_ISSUER != '' && env.FIREFOX_JWT_SECRET != ''
         env:
-          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
-          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
         run: |
           npx --yes web-ext sign \
             --source-dir output/firefox-mv3 \
             --artifacts-dir output/signed \
             --channel unlisted \
-            --api-key "$AMO_API_KEY" \
-            --api-secret "$AMO_API_SECRET"
+            --api-key "$FIREFOX_JWT_ISSUER" \
+            --api-secret "$FIREFOX_JWT_SECRET"
 
       - name: Normalize artifacts and update manifest
         run: |

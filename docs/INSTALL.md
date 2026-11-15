@@ -35,11 +35,13 @@ unlisted channel — it is not listed publicly.
 2. Sign:
 
 ```bash
-AMO_API_KEY=... AMO_API_SECRET=... pnpm sign:firefox
+FIREFOX_JWT_ISSUER=... FIREFOX_JWT_SECRET=... pnpm sign:firefox
 ```
 
-Or set `AMO_API_KEY` and `AMO_API_SECRET` as GitHub secrets; the release workflow
-then attaches `mediagrab-<version>.xpi` to the release.
+Or set `FIREFOX_JWT_ISSUER` (API key) and `FIREFOX_JWT_SECRET` (API secret) as
+GitHub secrets; the release workflow then signs the build and attaches
+`mediagrab-<version>.xpi` to the release. The older `AMO_API_KEY` /
+`AMO_API_SECRET` names are not needed.
 
 3. Drag the signed `.xpi` into Firefox, or use
    `about:addons → gear → Install Add-on From File…`.
