@@ -4,6 +4,7 @@ import type { ScrapedImage } from '~/utils/storage';
 import { getOriginalName } from '~/utils/filename';
 import { countMedia, loadGalleryPayload } from '~/utils/gallery';
 import { getHistory, mediaKey } from '~/utils/history';
+import { Button, cn, IconButton, Mark } from '~/ui/primitives';
 
 type Filter = 'all' | 'image' | 'gif' | 'video';
 type ItemStatus = 'idle' | 'queued' | 'done' | 'error';
@@ -61,7 +62,11 @@ export default function Gallery() {
     return items.filter((item) => {
       if (filter !== 'all' && item.kind !== filter) return false;
       if (!needle) return true;
-      return [item.alt, item.author, item.tweetId, item.src].filter(Boolean).join(' ').toLowerCase().includes(needle);
+      return [item.alt, item.author, item.tweetId, item.src]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(needle);
     });
   }, [items, filter, query]);
 
@@ -69,6 +74,7 @@ export default function Gallery() {
   const selectedVisible = visible.filter((item) => selected.has(item.id) && !item.unsupported);
   const selectedImages = selectedVisible.filter((item) => item.kind === 'image');
   const failed = visible.filter((item) => status[item.id] === 'error');
+  const savedCount = visible.filter((item) => savedKeys.has(mediaKey(item.src))).length;
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -80,7 +86,7 @@ export default function Gallery() {
   }
 
   function selectAll() {
-    setSelected(new Set(visible.map((item) => item.id)));
+    setSelected(new Set(visible.filter((item) => !item.unsupported).map((item) => item.id)));
   }
 
   function clearSelection() {
@@ -112,7 +118,7 @@ export default function Gallery() {
       if (await downloadOne(selectedVisible[i]!, i + 1)) ok++;
       await sleep(150);
     }
-    setNotice(`Finished: ${ok} of ${selectedVisible.length} saved.`);
+    setNotice(`Saved ${ok} of ${selectedVisible.length}.`);
   }
 
   async function retryFailed() {
@@ -152,15 +158,23 @@ export default function Gallery() {
   }
 
   if (loading) {
-    return <div className="grid min-h-screen place-items-center bg-surface text-ink-soft">Loading media…</div>;
+    return (
+      <div className="grid min-h-screen place-items-center bg-surface">
+        <div className="flex items-center gap-2.5 text-[13px] text-ink-soft">
+          <Spinner />
+          Reading page media…
+        </div>
+      </div>
+    );
   }
 
   if (!items.length) {
     return (
       <div className="grid min-h-screen place-items-center bg-surface px-6 text-center text-ink">
-        <div>
-          <h1 className="m-0 text-lg font-bold">Nothing to show</h1>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-ink-soft">
+        <div className="max-w-sm">
+          <Mark size={40} />
+          <h1 className="mt-4 text-[17px] font-semibold tracking-[-0.01em]">Nothing to show</h1>
+          <p className="m-0 mt-1.5 text-[13px] leading-relaxed text-ink-soft">
             Open a page, scan it from the MediaGrab popup, then choose Review &amp; save.
           </p>
         </div>
@@ -170,74 +184,97 @@ export default function Gallery() {
 
   return (
     <div className="min-h-screen bg-surface pb-24 text-ink">
-      <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-5 py-3">
+      <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-5 py-3">
+          <Mark size={24} />
           <div className="min-w-0 flex-1">
-            <h1 className="m-0 truncate text-[15px] font-bold">
+            <h1 className="m-0 truncate text-[14px] font-semibold tracking-[-0.01em]" title={title}>
               {counts.total} media from {title || 'this page'}
             </h1>
-            <p className="m-0 flex items-center gap-2 text-[12px] text-ink-soft">
-              <span>
-                {counts.images} images · {counts.videos} videos · {counts.gifs} GIFs
-              </span>
+            <p className="m-0 text-[11px] text-ink-soft">
+              {plural(counts.images, 'image')} · {plural(counts.videos, 'video')} · {plural(counts.gifs, 'GIF')}
+              {savedCount > 0 && <span className="text-success"> · {savedCount} already saved</span>}
               {sourceUrl && (
-                <a href={sourceUrl} target="_blank" rel="noreferrer" className="truncate underline hover:text-accent">
-                  source
-                </a>
+                <>
+                  {' · '}
+                  <a href={sourceUrl} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-accent hover:underline">
+                    open source
+                  </a>
+                </>
               )}
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <label className="relative">
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+            </svg>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search media"
+              className="h-9 w-52 rounded-lg border border-line bg-surface-2 pl-8 pr-3 text-[12px] text-ink outline-none transition-colors duration-150 placeholder:text-ink-soft/70 focus:border-accent"
+            />
+          </label>
+
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-2 p-0.5">
             {FILTERS.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
                 onClick={() => setFilter(entry.id)}
-                className={`rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors ${
+                className={cn(
+                  'h-7 rounded-[7px] px-2.5 text-[11.5px] font-medium transition-colors duration-150',
                   filter === entry.id
-                    ? 'bg-ink text-surface'
-                    : 'border border-line bg-surface-2 text-ink-soft hover:text-ink'
-                }`}
+                    ? 'bg-surface text-ink shadow-sm'
+                    : 'text-ink-soft hover:text-ink'
+                )}
               >
                 {entry.label}
               </button>
             ))}
           </div>
-
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search"
-            className="h-8 w-40 rounded-lg border border-line bg-surface-2 px-3 text-[12px] outline-none focus:border-accent"
-          />
         </div>
 
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 pb-2 text-[12px]">
-          <button type="button" onClick={selectAll} className="font-semibold hover:text-accent">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-5 pb-2 text-[11.5px]">
+          <button type="button" onClick={selectAll} className="font-medium hover:text-accent">
             Select all
           </button>
-          <button type="button" onClick={clearSelection} className="font-semibold hover:text-accent">
+          <span className="h-3 w-px bg-line" />
+          <button type="button" onClick={clearSelection} className="font-medium hover:text-accent">
             Clear
           </button>
-          <span className="text-ink-soft">
+          <span className="ml-auto text-ink-soft">
             {selectedVisible.length} of {visible.length} selected
           </span>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 py-4">
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+      <main className="mx-auto max-w-7xl px-5 py-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-3">
           {visible.map((item) => {
             const isSelected = selected.has(item.id);
             const itemStatus = status[item.id] || 'idle';
             const isSaved = savedKeys.has(mediaKey(item.src));
+            const disabled = item.unsupported === 'hls-only';
+
             return (
               <article
                 key={item.id}
-                className={`group relative overflow-hidden rounded-xl border bg-surface-2 transition-shadow ${
-                  isSelected ? 'border-accent ring-1 ring-accent' : 'border-line'
-                }`}
+                className={cn(
+                  'group relative overflow-hidden rounded-xl border bg-surface transition-shadow duration-200',
+                  isSelected ? 'border-accent/70' : 'border-line hover:shadow-[var(--shadow-soft)]'
+                )}
               >
                 <button
                   type="button"
@@ -245,78 +282,82 @@ export default function Gallery() {
                   className="block w-full text-left"
                   aria-label={`Preview ${item.kind}`}
                 >
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-black/5">
+                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-surface-2">
                     {item.poster || item.kind === 'image' ? (
                       <img
                         src={item.kind === 'image' ? item.src : item.poster}
                         alt={item.alt || ''}
                         loading="lazy"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-cover transition-transform duration-300 ease-[var(--ease-out)]"
                       />
                     ) : (
                       <div className="grid h-full w-full place-items-center text-ink-soft">
-                        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
+                        <PlayIcon size={26} />
                       </div>
                     )}
 
-                    <span className="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                      {item.kind === 'video' ? 'video' : item.kind === 'gif' ? 'gif' : 'photo'}
+                    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                      {item.kind === 'image' ? 'Photo' : item.kind}
                     </span>
 
                     {item.durationMs ? (
-                      <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      <span className="absolute bottom-2 right-2 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
                         {formatDuration(item.durationMs)}
                       </span>
                     ) : null}
 
                     {isSaved && (
-                      <span className="absolute bottom-2 left-2 rounded bg-success/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      <span className="absolute bottom-2 left-2 rounded bg-success/90 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white">
                         saved
                       </span>
                     )}
 
-                    {item.unsupported === 'hls-only' && (
+                    {disabled && (
                       <span className="absolute inset-x-2 bottom-2 rounded bg-danger/90 px-2 py-1 text-[10px] font-semibold text-white">
-                        HLS only — not supported yet
+                        HLS only — 2.1
                       </span>
                     )}
                   </div>
                 </button>
 
-                <label className="absolute right-2 top-2 grid h-5 w-5 cursor-pointer place-items-center rounded-md border border-white/60 bg-black/50">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    disabled={item.unsupported === 'hls-only'}
-                    onChange={() => toggle(item.id)}
-                    className="h-3.5 w-3.5 accent-accent disabled:opacity-40"
-                  />
-                </label>
+                <button
+                  type="button"
+                  onClick={() => toggle(item.id)}
+                  disabled={disabled}
+                  aria-pressed={isSelected}
+                  aria-label={isSelected ? 'Deselect item' : 'Select item'}
+                  className={cn(
+                    'absolute right-2 top-2 grid h-[22px] w-[22px] place-items-center rounded-md border transition-colors duration-150',
+                    isSelected
+                      ? 'border-accent bg-accent text-white'
+                      : 'border-white/70 bg-black/35 text-transparent hover:bg-black/55'
+                  )}
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                    <path d="M9.6 16.8 5.8 13l-1.4 1.4 5.2 5.2L21 8.2 19.6 6.8z" />
+                  </svg>
+                </button>
 
                 <div className="flex items-center justify-between gap-2 px-2.5 py-2">
                   <div className="min-w-0">
-                    <p className="m-0 truncate text-[11.5px] font-semibold">
+                    <p className="m-0 truncate text-[11.5px] font-medium">
                       {item.author ? `@${item.author}` : item.kind === 'image' ? 'Image' : item.kind.toUpperCase()}
                     </p>
                     <p className="m-0 text-[10.5px] text-ink-soft">
                       {item.width && item.height ? `${item.width}×${item.height}` : 'size unknown'}
-                      {itemStatus === 'done' ? ' · saved' : itemStatus === 'error' ? ' · failed' : ''}
+                      {itemStatus === 'done' && <span className="text-success"> · saved</span>}
+                      {itemStatus === 'error' && <span className="text-danger"> · failed</span>}
+                      {itemStatus === 'queued' && ' · working…'}
                     </p>
                   </div>
 
-                  <button
-                    type="button"
+                  <IconButton
+                    label="Download item"
+                    disabled={disabled || itemStatus === 'queued'}
                     onClick={() => downloadOne(item, 1)}
-                    disabled={item.unsupported === 'hls-only' || itemStatus === 'queued'}
-                    className="rounded-md px-1.5 py-1 text-ink-soft hover:bg-surface hover:text-accent disabled:opacity-40"
-                    aria-label="Download"
                   >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                      <path d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4L11 13.6V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v1.5A1.5 1.5 0 0 1 18.5 22h-13A1.5 1.5 0 0 1 4 20.5V19a1 1 0 0 1 1-1Z" />
-                    </svg>
-                  </button>
+                    <DownloadIcon />
+                  </IconButton>
                 </div>
               </article>
             );
@@ -324,65 +365,78 @@ export default function Gallery() {
         </div>
 
         {!visible.length && (
-          <p className="py-16 text-center text-sm text-ink-soft">Nothing matches that filter.</p>
+          <p className="py-20 text-center text-[13px] text-ink-soft">Nothing matches that filter.</p>
         )}
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-5 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <p className="m-0 text-[12px] text-ink-soft">{notice || `${selectedVisible.length} selected`}</p>
+      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-3">
+          <p className="m-0 text-[12px] text-ink-soft">
+            {notice || (
+              <>
+                <span className="font-semibold text-ink">{selectedVisible.length}</span> selected
+                {savedCount > 0 && <span className="text-ink-soft"> · saved items excluded</span>}
+              </>
+            )}
+          </p>
           <div className="flex items-center gap-2">
             {failed.length > 0 && (
-              <button
-                type="button"
-                onClick={retryFailed}
-                className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-1.5 text-[12px] font-semibold text-danger"
-              >
+              <Button variant="danger" size="sm" onClick={retryFailed}>
                 Retry failed ({failed.length})
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
-              onClick={downloadZip}
-              disabled={!selectedImages.length}
-              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-[12px] font-semibold disabled:opacity-40"
-            >
+            <Button variant="secondary" size="sm" disabled={!selectedImages.length} onClick={downloadZip}>
               ZIP images ({selectedImages.length})
-            </button>
-            <button
-              type="button"
-              onClick={downloadSelected}
-              disabled={!selectedVisible.length}
-              className="rounded-lg bg-ink px-4 py-1.5 text-[12px] font-semibold text-surface disabled:opacity-40"
-            >
+            </Button>
+            <Button variant="primary" size="sm" className="px-3.5" disabled={!selectedVisible.length} onClick={downloadSelected}>
               Download selected
-            </button>
+            </Button>
           </div>
         </div>
       </footer>
 
       {preview && (
         <div
-          className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-6"
+          className="fixed inset-0 z-40 grid place-items-center bg-black/75 p-6 backdrop-blur-sm animate-[mg-fade-in_160ms_var(--ease-out)]"
           onClick={() => setPreview(null)}
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-full w-full max-w-3xl" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="relative max-h-full w-full max-w-4xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreview(null)}
+              aria-label="Close preview"
+              className="absolute -top-3 right-0 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white backdrop-blur transition-colors hover:bg-white/20"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+              </svg>
+            </button>
+
             {preview.kind === 'image' ? (
-              <img src={preview.src} alt={preview.alt || ''} className="max-h-[80vh] w-full rounded-xl object-contain" />
+              <img
+                src={preview.src}
+                alt={preview.alt || ''}
+                className="max-h-[78vh] w-full rounded-xl object-contain bg-black"
+              />
             ) : (
               <video
                 src={preview.unsupported === 'hls-only' ? undefined : preview.src}
                 poster={preview.poster}
                 controls
                 autoPlay
-                className="max-h-[80vh] w-full rounded-xl bg-black"
+                className="max-h-[78vh] w-full rounded-xl bg-black"
               />
             )}
-            <div className="mt-3 flex items-center justify-between text-white">
-              <span className="text-[12px]">
-                {preview.width && preview.height ? `${preview.width}×${preview.height}` : ''}
+
+            <div className="mt-3 flex items-center justify-between gap-3 text-white">
+              <span className="text-[12px] text-white/80">
+                {preview.author ? `@${preview.author}` : ''}
+                {preview.width && preview.height ? ` · ${preview.width}×${preview.height}` : ''}
                 {preview.durationMs ? ` · ${formatDuration(preview.durationMs)}` : ''}
               </span>
               <div className="flex gap-2">
@@ -390,16 +444,9 @@ export default function Gallery() {
                   type="button"
                   onClick={() => downloadOne(preview, 1)}
                   disabled={preview.unsupported === 'hls-only'}
-                  className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-black disabled:opacity-40"
+                  className="h-8 rounded-lg bg-white px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
                 >
                   Download
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreview(null)}
-                  className="rounded-lg border border-white/40 px-3 py-1.5 text-[12px] font-semibold"
-                >
-                  Close
                 </button>
               </div>
             </div>
@@ -410,6 +457,10 @@ export default function Gallery() {
   );
 }
 
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
 function formatDuration(durationMs: number): string {
   const total = Math.round(durationMs / 1000);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -417,4 +468,29 @@ function formatDuration(durationMs: number): string {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function Spinner() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" className="animate-spin">
+      <circle cx="12" cy="12" r="8" strokeOpacity="0.25" />
+      <path d="M20 12a8 8 0 0 0-8-8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <path d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4L11 13.6V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v1.5A1.5 1.5 0 0 1 18.5 22h-13A1.5 1.5 0 0 1 4 20.5V19a1 1 0 0 1 1-1Z" />
+    </svg>
+  );
+}
+
+function PlayIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
 }
