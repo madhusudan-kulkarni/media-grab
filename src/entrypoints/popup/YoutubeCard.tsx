@@ -6,6 +6,7 @@ const SETUP_URL =
   'https://github.com/madhusudan-kulkarni/media-grab/blob/main/docs/NATIVE.md';
 
 export function YoutubeCard({
+  videoPage,
   ping,
   job,
   quality,
@@ -15,6 +16,7 @@ export function YoutubeCard({
   onRefresh,
   onDismissJob,
 }: {
+  videoPage: boolean;
   ping: YtdlpPing | null;
   job: YtdlpJob | null;
   quality: VideoQuality;
@@ -40,7 +42,11 @@ export function YoutubeCard({
         <StatusPill ping={ping} />
       </div>
 
-      {job && active ? (
+      {!videoPage ? (
+        <p className="m-0 mt-3 text-[11.5px] leading-relaxed text-ink-soft">
+          Open a video to download it. Home, search and channel pages have no single video.
+        </p>
+      ) : job && active ? (
         <div className="mt-3">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-medium">

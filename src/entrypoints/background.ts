@@ -57,6 +57,12 @@ export default defineBackground(() => {
       return;
     }
 
+    if (info.menuItemId === 'copy-image' && info.srcUrl) {
+      const result = await copyImageToClipboard(info.srcUrl);
+      await notifyCopy(result.ok, result.error);
+      return;
+    }
+
     if (info.menuItemId === 'fast-save-video' && info.srcUrl) {
       if (!info.srcUrl.startsWith('blob:')) {
         await downloadImage(info.srcUrl, tab?.title);
@@ -113,6 +119,13 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'mediagrab:copy-image' && message.src) {
+      copyImageToClipboard(String(message.src))
+        .then(sendResponse)
+        .catch((err) => sendResponse({ ok: false, error: String(err) }));
+      return true;
+    }
+
     if (message.type === 'mediagrab:resolve-tweet' && message.tweetId) {
       resolveTweetMedia(String(message.tweetId)).then((items) => {
         sendResponse({ ok: true, items });
@@ -155,6 +168,19 @@ function setupContextMenus() {
       {
         id: 'fast-save-image',
         title: 'MediaGrab: Save Image',
+        contexts: ['image'],
+      },
+      () => {
+        if (browser.runtime.lastError) {
+          // Silently ignore
+        }
+      }
+    );
+
+    browser.contextMenus.create(
+      {
+        id: 'copy-image',
+        title: 'MediaGrab: Copy Image',
         contexts: ['image'],
       },
       () => {
@@ -277,6 +303,64 @@ async function resolveTweetMedia(tweetId: string): Promise<ScrapedMedia[]> {
   return extractMediaFromSyndication(payload, tweetId).map((media) =>
     capturedToScraped(media, quality, `https://x.com/i/status/${tweetId}`)
   );
+}
+
+/**
+ * Copy an image to the OS clipboard as a real image, not a URL. Firefox's
+ * clipboard.setImageData accepts PNG and JPEG; anything else is re-encoded
+ * through a canvas (animated GIFs become their first frame).
+ */
+async function copyImageToClipboard(src: string): Promise<{ ok: boolean; error?: string }> {
+  const clipboard = (browser as any).clipboard;
+  if (!clipboard?.setImageData) {
+    return { ok: false, error: 'Copying images needs Firefox 127 or newer.' };
+  }
+  if (!src) return { ok: false, error: 'No image selected.' };
+
+  try {
+    const response = await fetch(src);
+    if (!response.ok) {
+      return { ok: false, error: `Could not read the image (${response.status}).` };
+    }
+
+    const blob = await response.blob();
+    let type = blob.type;
+    let buffer: ArrayBuffer;
+
+    if (type === 'image/png' || type === 'image/jpeg') {
+      buffer = await blob.arrayBuffer();
+    } else {
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext('2d');
+      if (!context) return { ok: false, error: 'Could not convert this image.' };
+      context.drawImage(bitmap, 0, 0);
+      const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!png) return { ok: false, error: 'Could not convert this image.' };
+      buffer = await png.arrayBuffer();
+      type = 'image/png';
+    }
+
+    await clipboard.setImageData(buffer, type === 'image/png' ? 'png' : 'jpeg');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Copy failed.' };
+  }
+}
+
+async function notifyCopy(ok: boolean, error?: string): Promise<void> {
+  try {
+    await browser.notifications.create({
+      type: 'basic',
+      iconUrl: browser.runtime.getURL('/icon-128.png'),
+      title: ok ? 'Image copied' : 'Copy failed',
+      message: ok ? 'Paste it into any app.' : error || 'Could not copy this image.',
+    });
+  } catch {
+    // Notifications can be disabled.
+  }
 }
 
 async function fetchImageBuffer(src: string): Promise<{ data: ArrayBuffer | string; isBase64: boolean } | null> {

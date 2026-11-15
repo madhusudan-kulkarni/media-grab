@@ -132,6 +132,15 @@ export default function Gallery() {
     setNotice(`Retried: ${ok} of ${failed.length} saved.`);
   }
 
+  async function copyImage(src: string) {
+    try {
+      const response = await browser.runtime.sendMessage({ type: 'mediagrab:copy-image', src });
+      setNotice(response?.ok ? 'Image copied. Paste it anywhere.' : response?.error || 'Could not copy this image.');
+    } catch {
+      setNotice('Could not copy this image.');
+    }
+  }
+
   async function sendToYtdlp(media: ScrapedMedia) {
     const url = media.tweetId ? `https://x.com/i/status/${media.tweetId}` : media.src;
     try {
@@ -370,6 +379,12 @@ export default function Gallery() {
                     </p>
                   </div>
 
+                  {item.kind === 'image' && (
+                    <IconButton label="Copy image" onClick={() => copyImage(item.src)}>
+                      <CopyIcon />
+                    </IconButton>
+                  )}
+
                   {disabled ? (
                     <button
                       type="button"
@@ -470,6 +485,15 @@ export default function Gallery() {
                 {preview.durationMs ? ` · ${formatDuration(preview.durationMs)}` : ''}
               </span>
               <div className="flex gap-2">
+                {preview.kind === 'image' && (
+                  <button
+                    type="button"
+                    onClick={() => copyImage(preview.src)}
+                    className="h-8 rounded-lg border border-white/40 px-3 text-[12px] font-semibold text-white transition-colors hover:bg-white/10"
+                  >
+                    Copy image
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() =>
@@ -506,6 +530,14 @@ function Spinner() {
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" className="animate-spin">
       <circle cx="12" cy="12" r="8" strokeOpacity="0.25" />
       <path d="M20 12a8 8 0 0 0-8-8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <path d="M16 1H4a2 2 0 0 0-2 2v12h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z" />
     </svg>
   );
 }
