@@ -22,11 +22,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type check and test
+        run: |
+          pnpm exec tsc --noEmit
+          pnpm test
 
       - name: Package Chrome extension
         run: pnpm run zip
@@ -34,26 +39,55 @@ jobs:
       - name: Package Firefox extension
         run: pnpm run zip:firefox
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            .output/*-chrome.zip
-            .output/*-firefox.zip
-            .output/*-sources.zip
-          generate_release_notes: true
-
-      - name: Submit to Mozilla Add-ons (AMO)
+      - name: Sign Firefox extension (unlisted)
         if: env.FIREFOX_JWT_ISSUER != '' && env.FIREFOX_JWT_SECRET != ''
         env:
           FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
           FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
         run: |
-          pnpm wxt submit \
-            --firefox-zip .output/imagegrab-firefox.zip \
-            --firefox-sources-zip $(ls .output/*-sources.zip | head -n 1) \
-            --firefox-extension-id 'image-grab' \
-            --firefox-jwt-issuer "$FIREFOX_JWT_ISSUER" \
-            --firefox-jwt-secret "$FIREFOX_JWT_SECRET" \
-            --firefox-channel listed
+          npx --yes web-ext sign \
+            --source-dir output/firefox-mv3 \
+            --artifacts-dir output/signed \
+            --channel unlisted \
+            --api-key "$FIREFOX_JWT_ISSUER" \
+            --api-secret "$FIREFOX_JWT_SECRET"
 
+      - name: Normalize artifacts and update manifest
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if compgen -G "output/signed/*.xpi" > /dev/null; then
+            cp "$(ls output/signed/*.xpi | head -n 1)" "output/signed/mediagrab-${version}.xpi"
+          fi
+          node scripts/write-updates.mjs "$version" "$GITHUB_REF_NAME"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            output/*-chrome.zip
+            output/*-firefox.zip
+            output/*-sources.zip
+            output/signed/mediagrab-*.xpi
+            updates.json
+          generate_release_notes: true
+
+  update-manifest:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Write updates.json for the new tag
+        run: node scripts/write-updates.mjs "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME"
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates.json
+          git diff --staged --quiet || git commit -m "chore: updates.json for $GITHUB_REF_NAME"
+          git push

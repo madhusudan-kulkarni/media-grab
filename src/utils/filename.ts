@@ -7,6 +7,9 @@ export interface FilenameOptions {
   pageTitle?: string;
   width?: number;
   height?: number;
+  author?: string;
+  tweetId?: string;
+  mediaId?: string;
 }
 
 export function sanitizePathSegment(segment: string): string {
@@ -55,10 +58,10 @@ export function getBatchFolderName(options: {
 
   const subName = pageSlug ? `${pageSlug}_${dateStr}` : `${dateStr}_${timeStr}`;
 
-  const folderPath = `ImageGrab/${safeDomain}/${subName}/`;
+  const folderPath = `MediaGrab/${safeDomain}/${subName}/`;
   const zipFilename = pageSlug
-    ? `ImageGrab_${safeDomain}_${pageSlug}_${dateStr}.zip`
-    : `ImageGrab_${safeDomain}_${timestamp}.zip`;
+    ? `MediaGrab_${safeDomain}_${pageSlug}_${dateStr}.zip`
+    : `MediaGrab_${safeDomain}_${timestamp}.zip`;
 
   return { folderPath, zipFilename };
 }
@@ -95,6 +98,9 @@ export function formatFilename(
     pageTitle = '',
     width = 0,
     height = 0,
+    author = '',
+    tweetId = '',
+    mediaId = '',
   } = options;
 
   const dateStr = timestamp.split('_')[0] || timestamp;
@@ -104,6 +110,9 @@ export function formatFilename(
   const safeOriginalName = sanitizePathSegment(originalName);
   const safeDomain = sanitizePathSegment(domain);
   const safePageTitle = sanitizePathSegment(cleanPageSlug(pageTitle) || domain);
+  const safeAuthor = sanitizePathSegment(author);
+  const safeTweetId = sanitizePathSegment(tweetId);
+  const safeMediaId = sanitizePathSegment(mediaId);
 
   let formatted = template
     .replace(/\$\{original_name\}/gi, safeOriginalName)
@@ -115,6 +124,10 @@ export function formatFilename(
     .replace(/\$\{page_title\}/gi, safePageTitle)
     .replace(/\$\{width\}/gi, String(width || ''))
     .replace(/\$\{height\}/gi, String(height || ''))
+    .replace(/\$\{author\}/gi, safeAuthor)
+    .replace(/\$\{tweet_id\}/gi, safeTweetId)
+    .replace(/\$\{tweetid\}/gi, safeTweetId)
+    .replace(/\$\{media_id\}/gi, safeMediaId)
     .replace(/\$\{index\}/gi, String(index))
     .replace(/\$\{index_00\}/gi, paddedIndex);
 

@@ -1,13 +1,13 @@
-import { settings, ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
+import { settings } from '~/utils/storage';
+import type { ScrapedImage, HoverKeyModifier } from '~/utils/storage';
 import { getFileExtension, getOriginalName } from '~/utils/filename';
+import { imageToMedia, scrapeVideos } from '~/utils/dom-media';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
-  cssInjectionMode: 'ui',
   async main(ctx) {
     let hoverOverlayEnabled = await settings.hoverOverlayEnabled.getValue();
     let minHoverSize = await settings.minHoverSize.getValue();
-    let batchDownloadMode = await settings.batchDownloadMode.getValue();
     let hoverKeyModifier = await settings.hoverKeyModifier.getValue();
 
     // Watch for reactive settings updates
@@ -22,16 +22,13 @@ export default defineContentScript({
       minHoverSize = Number(val) || 150;
     });
 
-    settings.batchDownloadMode.watch((val) => {
-      batchDownloadMode = val as BatchDownloadMode;
-    });
 
     settings.hoverKeyModifier.watch((val) => {
       hoverKeyModifier = val as HoverKeyModifier;
     });
 
     const ui = await createShadowRootUi(ctx, {
-      name: 'imagegrab-ui-root',
+      name: 'mediagrab-ui-root',
       position: 'inline',
       anchor: 'html',
       onMount: (container) => {
@@ -39,26 +36,6 @@ export default defineContentScript({
         const style = document.createElement('style');
         style.textContent = getShadowStyles();
         container.appendChild(style);
-
-        const modal = createBatchModal(
-          container,
-          () => batchDownloadMode,
-          async (selected, mode, onProgress) => {
-            onProgress(1, selected.length, 'Preparing images...');
-            const msgType = mode === 'zip' ? 'download-batch-zip' : 'download-batch';
-            const res = await browser.runtime.sendMessage({
-              type: msgType,
-              images: selected,
-              pageTitle: document.title || '',
-            });
-            if (res && res.ok === false) {
-              throw new Error(res.error || 'Failed to download images.');
-            }
-          },
-          async (onProgress) => {
-            return await performDeepScan(onProgress);
-          }
-        );
 
         const hoverBtn = createFloatingHoverButton(container, async (src, width, height) => {
           await browser.runtime.sendMessage({
@@ -70,21 +47,28 @@ export default defineContentScript({
           });
         });
 
-        const onMessage = (message: { type?: string }) => {
-          if (message.type === 'open-batch-modal') {
-            const images = scrapeImages();
-            modal.open(images);
+        const onMessage = (message: { type?: string }, _sender: unknown, sendResponse: (response: unknown) => void) => {
+          if (message.type === 'mediagrab:collect') {
+            // On X the dedicated bridge owns collection; answering here would
+            // race it and lose captured videos.
+            if (/(^|\.)(x|twitter)\.com$/i.test(window.location.hostname)) return;
+
+            const items = [
+              ...scrapeImages().map(imageToMedia),
+              ...scrapeVideos(),
+            ];
+            sendResponse({ ok: true, items });
+            return true;
           }
         };
 
         browser.runtime.onMessage.addListener(onMessage);
 
-        return { modal, hoverBtn, onMessage };
+        return { hoverBtn, onMessage };
       },
       onRemove: (mounted) => {
         if (!mounted) return;
         browser.runtime.onMessage.removeListener(mounted.onMessage);
-        mounted.modal.destroy();
         mounted.hoverBtn.destroy();
       },
     });
@@ -253,28 +237,6 @@ function scrapeImages(): ScrapedImage[] {
    DEEP SCAN (Auto-Scroll to trigger lazy loading)
    ========================================================================== */
 
-async function performDeepScan(onProgress: (msg: string) => void): Promise<ScrapedImage[]> {
-  const originalScrollY = window.scrollY;
-  const viewportHeight = window.innerHeight;
-  const totalHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-  const steps = Math.min(Math.ceil(totalHeight / (viewportHeight * 0.8)), 8);
-
-  for (let i = 1; i <= steps; i++) {
-    onProgress(`Scanning page for images (${i}/${steps})...`);
-    window.scrollTo({
-      top: (i / steps) * (totalHeight - viewportHeight),
-      behavior: 'smooth',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  }
-
-  // Restore scroll position
-  window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  return scrapeImages();
-}
-
 /* ==========================================================================
    FLOATING HOVER SAVE BUTTON (Zero host DOM mutation)
    ========================================================================== */
@@ -285,7 +247,7 @@ function createFloatingHoverButton(
 ) {
   const btn = document.createElement('button');
   btn.className = 'ig-floating-btn';
-  btn.title = 'Save Image (ImageGrab)';
+  btn.title = 'Save Image (MediaGrab)';
   btn.innerHTML = `
     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
       <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
@@ -443,562 +405,6 @@ function setupHoverTracker(
 /* ==========================================================================
    BATCH DOWNLOADER MODAL (Full Featured)
    ========================================================================== */
-
-function createBatchModal(
-  root: HTMLElement,
-  getDefaultMode: () => BatchDownloadMode,
-  onDownloadSelected: (
-    images: ScrapedImage[],
-    mode: BatchDownloadMode,
-    onProgress: (current: number, total: number, msg?: string) => void
-  ) => Promise<void>,
-  onDeepScan: (onProgress: (msg: string) => void) => Promise<ScrapedImage[]>
-) {
-  const backdrop = document.createElement('div');
-  backdrop.className = 'ig-modal-backdrop';
-
-  const card = document.createElement('div');
-  card.className = 'ig-modal-card';
-
-  // Header
-  const header = document.createElement('div');
-  header.className = 'ig-modal-header';
-  header.innerHTML = `
-    <div class="ig-modal-title-wrap">
-      <div class="ig-logo-badge">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="#2563eb">
-          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-        </svg>
-      </div>
-      <div>
-        <h2 class="ig-modal-title">Batch Image Downloader</h2>
-        <span class="ig-modal-subtitle" id="ig-subtitle">0 images found</span>
-      </div>
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <button class="ig-action-btn" id="ig-deep-scan-btn" title="Scroll down page to find lazy-loaded images">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-          <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
-        </svg>
-        <span>Scan More</span>
-      </button>
-      <button class="ig-icon-btn" id="ig-close-btn" title="Close (Esc)">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-        </svg>
-      </button>
-    </div>
-  `;
-
-  // Toolbar
-  const toolbar = document.createElement('div');
-  toolbar.className = 'ig-modal-toolbar';
-  toolbar.innerHTML = `
-    <div class="ig-toolbar-left">
-      <div class="ig-format-filters" id="ig-format-filters"></div>
-      <div class="ig-orientation-filters" id="ig-orientation-filters">
-        <button class="ig-chip ig-chip-active" data-orientation="all">All Shapes</button>
-        <button class="ig-chip" data-orientation="landscape">Landscape</button>
-        <button class="ig-chip" data-orientation="portrait">Portrait</button>
-        <button class="ig-chip" data-orientation="square">Square</button>
-      </div>
-      <div class="ig-size-filter-wrap">
-        <select id="ig-min-dimension-select" class="ig-select">
-          <option value="0">All Sizes</option>
-          <option value="100">Min 100px</option>
-          <option value="300">Min 300px</option>
-          <option value="600">Min 600px</option>
-          <option value="1000">Min 1000px</option>
-        </select>
-      </div>
-    </div>
-    <div class="ig-toolbar-right">
-      <input type="text" id="ig-search-input" class="ig-search-input" placeholder="Search images..." />
-      <button class="ig-action-link-btn" id="ig-select-all-btn">Select All</button>
-    </div>
-  `;
-
-  // Grid container
-  const gridWrap = document.createElement('div');
-  gridWrap.className = 'ig-grid-wrap';
-  const grid = document.createElement('div');
-  grid.className = 'ig-image-grid';
-  gridWrap.appendChild(grid);
-
-  // Footer
-  const footer = document.createElement('div');
-  footer.className = 'ig-modal-footer';
-  footer.innerHTML = `
-    <div class="ig-footer-status">
-      <span id="ig-selected-counter" class="ig-counter-badge">0 selected</span>
-      <span id="ig-progress-label" class="ig-progress-label"></span>
-    </div>
-    <div class="ig-footer-actions">
-      <button class="ig-btn ig-btn-secondary" id="ig-cancel-btn">Cancel</button>
-      <button class="ig-btn ig-btn-outline" id="ig-download-individual-btn" title="Download each image as a separate file">
-        <span>Save Separately</span>
-      </button>
-      <button class="ig-btn ig-btn-primary" id="ig-download-zip-btn" title="Download all selected images in 1 ZIP file (No spam dialogs)">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-        </svg>
-        <span id="ig-download-zip-btn-text">Download as ZIP</span>
-      </button>
-    </div>
-  `;
-
-  // Toast notification
-  const toast = document.createElement('div');
-  toast.className = 'ig-toast';
-  toast.id = 'ig-toast';
-
-  // Lightbox overlay
-  const lightbox = document.createElement('div');
-  lightbox.className = 'ig-lightbox';
-  lightbox.innerHTML = `
-    <div class="ig-lightbox-content">
-      <button class="ig-lightbox-close" id="ig-lightbox-close">&times;</button>
-      <img id="ig-lightbox-img" src="" alt="Preview" />
-      <div class="ig-lightbox-info" id="ig-lightbox-info"></div>
-    </div>
-  `;
-
-  card.append(header, toolbar, gridWrap, footer);
-  backdrop.append(card, toast, lightbox);
-  root.appendChild(backdrop);
-
-  // State
-  let allImages: ScrapedImage[] = [];
-  let selected = new Set<string>();
-  let activeFormatFilter = 'ALL';
-  let activeOrientationFilter = 'all';
-  let activeMinDimension = 0;
-  let searchQuery = '';
-  let isDownloading = false;
-  let isScanning = false;
-
-  // Elements
-  const subtitleEl = card.querySelector('#ig-subtitle') as HTMLElement;
-  const formatFiltersEl = card.querySelector('#ig-format-filters') as HTMLElement;
-  const orientationFiltersEl = card.querySelector('#ig-orientation-filters') as HTMLElement;
-  const minDimSelect = card.querySelector('#ig-min-dimension-select') as HTMLSelectElement;
-  const searchInput = card.querySelector('#ig-search-input') as HTMLInputElement;
-  const selectAllBtn = card.querySelector('#ig-select-all-btn') as HTMLButtonElement;
-  const deepScanBtn = card.querySelector('#ig-deep-scan-btn') as HTMLButtonElement;
-  const counterBadge = card.querySelector('#ig-selected-counter') as HTMLElement;
-  const progressLabel = card.querySelector('#ig-progress-label') as HTMLElement;
-  const downloadZipBtn = card.querySelector('#ig-download-zip-btn') as HTMLButtonElement;
-  const downloadZipBtnText = card.querySelector('#ig-download-zip-btn-text') as HTMLElement;
-  const downloadIndividualBtn = card.querySelector('#ig-download-individual-btn') as HTMLButtonElement;
-  const cancelBtn = card.querySelector('#ig-cancel-btn') as HTMLButtonElement;
-  const closeBtn = card.querySelector('#ig-close-btn') as HTMLButtonElement;
-
-  const lightboxImg = lightbox.querySelector('#ig-lightbox-img') as HTMLImageElement;
-  const lightboxInfo = lightbox.querySelector('#ig-lightbox-info') as HTMLElement;
-  const lightboxClose = lightbox.querySelector('#ig-lightbox-close') as HTMLButtonElement;
-
-  const showToast = (text: string) => {
-    toast.textContent = text;
-    toast.classList.add('ig-toast-visible');
-    setTimeout(() => {
-      toast.classList.remove('ig-toast-visible');
-    }, 2000);
-  };
-
-  const getFilteredImages = () => {
-    return allImages.filter((img) => {
-      // Format filter
-      if (activeFormatFilter !== 'ALL') {
-        const extMatch = img.ext.toUpperCase() === activeFormatFilter;
-        if (!extMatch) return false;
-      }
-      // Orientation filter
-      if (activeOrientationFilter !== 'all') {
-        if (img.orientation !== activeOrientationFilter) return false;
-      }
-      // Min dimension filter
-      if (activeMinDimension > 0) {
-        if (img.width < activeMinDimension && img.height < activeMinDimension) {
-          return false;
-        }
-      }
-      // Search query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = img.originalName.toLowerCase().includes(q);
-        const matchesSrc = img.src.toLowerCase().includes(q);
-        const matchesAlt = img.alt ? img.alt.toLowerCase().includes(q) : false;
-        if (!matchesName && !matchesSrc && !matchesAlt) return false;
-      }
-      return true;
-    });
-  };
-
-  const updateHeaderAndCounter = () => {
-    const filtered = getFilteredImages();
-    subtitleEl.textContent = `${allImages.length} images found (${filtered.length} shown)`;
-
-    const selectedFilteredCount = filtered.filter((img) => selected.has(img.src)).length;
-    counterBadge.textContent = `${selectedFilteredCount} / ${filtered.length} selected`;
-
-    const allFilteredSelected = filtered.length > 0 && selectedFilteredCount === filtered.length;
-    selectAllBtn.textContent = allFilteredSelected ? 'Deselect All' : 'Select All';
-
-    downloadZipBtn.disabled = selectedFilteredCount === 0 || isDownloading;
-    downloadIndividualBtn.disabled = selectedFilteredCount === 0 || isDownloading;
-
-    downloadZipBtnText.textContent = isDownloading
-      ? 'Bundling ZIP...'
-      : `Download ZIP (${selectedFilteredCount})`;
-  };
-
-  const renderFormatFilters = () => {
-    formatFiltersEl.innerHTML = '';
-    const formats = ['ALL', 'JPG', 'PNG', 'WEBP', 'SVG', 'GIF', 'AVIF'];
-    
-    const counts: Record<string, number> = { ALL: allImages.length };
-    for (const img of allImages) {
-      const f = img.ext.toUpperCase();
-      counts[f] = (counts[f] || 0) + 1;
-    }
-
-    formats.forEach((fmt) => {
-      const count = counts[fmt] || 0;
-      if (fmt !== 'ALL' && count === 0) return;
-
-      const chip = document.createElement('button');
-      chip.className = `ig-chip ${activeFormatFilter === fmt ? 'ig-chip-active' : ''}`;
-      chip.textContent = `${fmt} (${count})`;
-      chip.addEventListener('click', () => {
-        activeFormatFilter = fmt;
-        renderFormatFilters();
-        renderGrid();
-      });
-      formatFiltersEl.appendChild(chip);
-    });
-  };
-
-  // Orientation Filter Click Handlers
-  orientationFiltersEl.querySelectorAll('.ig-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      orientationFiltersEl.querySelectorAll('.ig-chip').forEach((c) => c.classList.remove('ig-chip-active'));
-      chip.classList.add('ig-chip-active');
-      activeOrientationFilter = chip.getAttribute('data-orientation') || 'all';
-      renderGrid();
-    });
-  });
-
-  const renderGrid = () => {
-    grid.innerHTML = '';
-    const filtered = getFilteredImages();
-
-    if (filtered.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'ig-empty-state';
-      empty.innerHTML = `
-        <svg viewBox="0 0 24 24" width="48" height="48" fill="#9ca3af">
-          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-        </svg>
-        <p>No images match the current filter.</p>
-      `;
-      grid.appendChild(empty);
-      updateHeaderAndCounter();
-      return;
-    }
-
-    filtered.forEach((img) => {
-      const isChecked = selected.has(img.src);
-      const cardEl = document.createElement('div');
-      cardEl.className = `ig-card ${isChecked ? 'ig-card-selected' : ''}`;
-
-      const topBar = document.createElement('div');
-      topBar.className = 'ig-card-topbar';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'ig-checkbox';
-      checkbox.checked = isChecked;
-
-      const actionsBar = document.createElement('div');
-      actionsBar.className = 'ig-card-quick-actions';
-
-      // Copy URL Button
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'ig-quick-btn';
-      copyBtn.title = 'Copy image URL';
-      copyBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-        </svg>
-      `;
-      copyBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(img.src);
-        showToast('Image URL copied to clipboard!');
-      });
-
-      // Open in New Tab Button
-      const openTabBtn = document.createElement('button');
-      openTabBtn.className = 'ig-quick-btn';
-      openTabBtn.title = 'Open full image in new tab';
-      openTabBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-          <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
-        </svg>
-      `;
-      openTabBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.open(img.src, '_blank');
-      });
-
-      // Lightbox Preview Button
-      const previewBtn = document.createElement('button');
-      previewBtn.className = 'ig-quick-btn';
-      previewBtn.title = 'Preview full size';
-      previewBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-        </svg>
-      `;
-      previewBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openLightbox(img);
-      });
-
-      actionsBar.append(copyBtn, openTabBtn, previewBtn);
-      topBar.append(checkbox, actionsBar);
-
-      const thumbWrap = document.createElement('div');
-      thumbWrap.className = 'ig-thumb-wrap';
-
-      const thumb = document.createElement('img');
-      thumb.className = 'ig-thumb';
-      thumb.src = img.src;
-      thumb.alt = img.alt || img.originalName;
-      thumb.loading = 'lazy';
-
-      thumbWrap.appendChild(thumb);
-
-      const meta = document.createElement('div');
-      meta.className = 'ig-card-meta';
-
-      const sizeBadge = document.createElement('span');
-      sizeBadge.className = 'ig-badge ig-badge-size';
-      sizeBadge.textContent = img.width && img.height ? `${img.width}×${img.height}` : 'Dynamic';
-
-      const formatBadge = document.createElement('span');
-      formatBadge.className = 'ig-badge ig-badge-format';
-      formatBadge.textContent = img.ext.toUpperCase();
-
-      meta.append(sizeBadge, formatBadge);
-
-      cardEl.append(topBar, thumbWrap, meta);
-
-      // Card click toggles selection
-      cardEl.addEventListener('click', () => {
-        if (selected.has(img.src)) {
-          selected.delete(img.src);
-          cardEl.classList.remove('ig-card-selected');
-          checkbox.checked = false;
-        } else {
-          selected.add(img.src);
-          cardEl.classList.add('ig-card-selected');
-          checkbox.checked = true;
-        }
-        updateHeaderAndCounter();
-      });
-
-      grid.appendChild(cardEl);
-    });
-
-    updateHeaderAndCounter();
-  };
-
-  // Deep Scan Action
-  deepScanBtn.addEventListener('click', async () => {
-    if (isScanning) return;
-    isScanning = true;
-    deepScanBtn.classList.add('ig-action-btn-loading');
-    deepScanBtn.querySelector('span')!.textContent = 'Scanning...';
-
-    try {
-      const prevCount = allImages.length;
-      const nextImages = await onDeepScan((msg) => {
-        progressLabel.textContent = msg;
-      });
-
-      allImages = nextImages;
-      // Auto-select newly found images
-      nextImages.forEach((img) => selected.add(img.src));
-      const diff = nextImages.length - prevCount;
-
-      renderFormatFilters();
-      renderGrid();
-      showToast(diff > 0 ? `+${diff} new images discovered!` : 'Scan complete. All visible images captured.');
-      progressLabel.textContent = '';
-    } catch {
-      showToast('Scan interrupted.');
-    } finally {
-      isScanning = false;
-      deepScanBtn.classList.remove('ig-action-btn-loading');
-      deepScanBtn.querySelector('span')!.textContent = 'Scan More';
-    }
-  });
-
-  const openLightbox = (img: ScrapedImage) => {
-    lightboxImg.src = img.src;
-    lightboxInfo.innerHTML = `
-      <span><strong>${img.originalName}.${img.ext}</strong></span>
-      <span>${img.width} × ${img.height} px (${img.orientation || 'shape'})</span>
-    `;
-    lightbox.style.display = 'flex';
-  };
-
-  const closeLightbox = () => {
-    lightbox.style.display = 'none';
-    lightboxImg.src = '';
-  };
-
-  lightboxClose.addEventListener('click', closeLightbox);
-  lightbox.addEventListener('click', (e) => {
-    if (e.target === lightbox) closeLightbox();
-  });
-
-  // Select all / Deselect all
-  selectAllBtn.addEventListener('click', () => {
-    const filtered = getFilteredImages();
-    const allSelected = filtered.every((img) => selected.has(img.src));
-
-    if (allSelected) {
-      filtered.forEach((img) => selected.delete(img.src));
-    } else {
-      filtered.forEach((img) => selected.add(img.src));
-    }
-    renderGrid();
-  });
-
-  // Search input
-  searchInput.addEventListener('input', () => {
-    searchQuery = searchInput.value.trim();
-    renderGrid();
-  });
-
-  // Min dimension filter
-  minDimSelect.addEventListener('change', () => {
-    activeMinDimension = Number(minDimSelect.value) || 0;
-    renderGrid();
-  });
-
-  const runDownload = async (mode: BatchDownloadMode) => {
-    if (isDownloading) return;
-    const selectedImages = allImages.filter((img) => selected.has(img.src));
-    if (selectedImages.length === 0) return;
-
-    if (mode === 'individual' && selectedImages.length > 5) {
-      const confirmIndividual = window.confirm(
-        `Saving ${selectedImages.length} separate files.\n\nNOTE: If your browser setting "Ask where to save each file before downloading" is turned ON, your browser will prompt for every single image.\n\nTip: Use "Download as ZIP" to download everything in 1 file prompt.\n\nDo you want to continue saving separately?`
-      );
-      if (!confirmIndividual) return;
-    }
-
-    isDownloading = true;
-    updateHeaderAndCounter();
-    progressLabel.textContent = mode === 'zip'
-      ? `Fetching & packaging ${selectedImages.length} images into ZIP...`
-      : `Starting individual download of ${selectedImages.length} images...`;
-
-    try {
-      await onDownloadSelected(selectedImages, mode, (current, total, msg) => {
-        progressLabel.textContent = msg || `Processing ${current} of ${total}...`;
-      });
-      progressLabel.textContent = mode === 'zip'
-        ? `ZIP archive downloaded successfully!`
-        : `Saved ${selectedImages.length} images!`;
-      setTimeout(() => {
-        close();
-      }, 1400);
-    } catch (err) {
-      progressLabel.textContent = 'Download failed. Please check browser permissions.';
-    } finally {
-      isDownloading = false;
-      updateHeaderAndCounter();
-    }
-  };
-
-  // ZIP Download action
-  downloadZipBtn.addEventListener('click', () => runDownload('zip'));
-
-  // Individual Download action
-  downloadIndividualBtn.addEventListener('click', () => runDownload('individual'));
-
-  const close = () => {
-    backdrop.style.display = 'none';
-    closeLightbox();
-  };
-
-  closeBtn.addEventListener('click', close);
-  cancelBtn.addEventListener('click', close);
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) close();
-  });
-
-  // Hotkey listener inside modal
-  document.addEventListener('keydown', (e) => {
-    if (backdrop.style.display !== 'flex') return;
-
-    // Esc key
-    if (e.key === 'Escape') {
-      if (lightbox.style.display === 'flex') {
-        closeLightbox();
-      } else {
-        close();
-      }
-      return;
-    }
-
-    // Ctrl+A / Cmd+A to toggle select all inside modal
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && document.activeElement !== searchInput) {
-      e.preventDefault();
-      selectAllBtn.click();
-      return;
-    }
-
-    // Enter to trigger ZIP download
-    if (e.key === 'Enter' && !isDownloading && !isScanning && lightbox.style.display !== 'flex' && document.activeElement !== searchInput) {
-      e.preventDefault();
-      downloadZipBtn.click();
-    }
-  });
-
-  return {
-    open(images: ScrapedImage[]) {
-      allImages = images;
-      selected = new Set(images.map((img) => img.src));
-      activeFormatFilter = 'ALL';
-      activeOrientationFilter = 'all';
-      activeMinDimension = 0;
-      searchQuery = '';
-      minDimSelect.value = '0';
-      searchInput.value = '';
-      progressLabel.textContent = '';
-      isDownloading = false;
-      isScanning = false;
-
-      orientationFiltersEl.querySelectorAll('.ig-chip').forEach((c, idx) => {
-        if (idx === 0) c.classList.add('ig-chip-active');
-        else c.classList.remove('ig-chip-active');
-      });
-
-      renderFormatFilters();
-      renderGrid();
-      backdrop.style.display = 'flex';
-    },
-    close,
-    destroy() {
-      backdrop.remove();
-    },
-  };
-}
 
 /* ==========================================================================
    SHADOW DOM CSS STYLES
