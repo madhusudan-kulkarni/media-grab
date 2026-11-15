@@ -4,6 +4,7 @@ import {
   extractMediaFromGraphql,
   formatDuration,
   parseDimensionsFromUrl,
+  kindFromVideoUrl,
   pickMp4Variant,
   extractMediaFromSyndication,
   syndicationEndpoint,
@@ -375,5 +376,22 @@ describe('mixed and nested media', () => {
 
     const [media] = extractMediaFromGraphql(payload);
     expect(media).toMatchObject({ tweetId: '2000', author: 'quoted', kind: 'video' });
+  });
+});
+
+
+describe('kindFromVideoUrl', () => {
+  it('treats tweet_video as a GIF', () => {
+    expect(kindFromVideoUrl('https://video.twimg.com/tweet_video/123.mp4', 'video')).toBe('gif');
+  });
+
+  it('treats ext_tw_video as a video even if the payload said GIF', () => {
+    expect(
+      kindFromVideoUrl('https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/720x1280/clip.mp4', 'gif')
+    ).toBe('video');
+  });
+
+  it('keeps the payload kind for unrecognised paths', () => {
+    expect(kindFromVideoUrl('https://example.com/media/1.mp4', 'video')).toBe('video');
   });
 });

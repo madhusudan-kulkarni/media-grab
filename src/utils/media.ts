@@ -136,6 +136,17 @@ export function pickMp4Variant(variants: MediaVariant[], quality: VideoQuality =
   })[0] ?? null;
 }
 
+/**
+ * X names its paths by upload type: GIF loops live under /tweet_video/,
+ * regular videos under /ext_tw_video/ or /amplify_video/. Trusting the URL
+ * fixes payloads that report every mp4 as animated_gif.
+ */
+export function kindFromVideoUrl(url: string, fallback: MediaKind): MediaKind {
+  if (/\/tweet_video\//i.test(url)) return 'gif';
+  if (/\/(ext_tw_video|amplify_video)\//i.test(url)) return 'video';
+  return fallback;
+}
+
 export function formatDuration(durationMs?: number): string {
   if (!durationMs || durationMs < 0) return '';
   const totalSeconds = Math.round(durationMs / 1000);
@@ -366,7 +377,7 @@ export function capturedToScraped(
   if (media.kind === 'image') {
     const main = media.variants[0];
     const url = main?.url || media.poster || '';
-    return { ...base, src: url, ext: 'jpg', mimeType: 'image/jpeg' };
+    return { ...base, kind: 'image', src: url, ext: 'jpg', mimeType: 'image/jpeg' };
   }
 
   const mp4 = pickMp4Variant(media.variants, quality);
@@ -379,5 +390,11 @@ export function capturedToScraped(
     };
   }
 
-  return { ...base, src: mp4.url, ext: 'mp4', mimeType: mp4.mime || 'video/mp4' };
+  return {
+    ...base,
+    kind: kindFromVideoUrl(mp4.url, media.kind),
+    src: mp4.url,
+    ext: 'mp4',
+    mimeType: mp4.mime || 'video/mp4',
+  };
 }

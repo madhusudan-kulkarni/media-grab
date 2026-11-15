@@ -88,12 +88,12 @@ export function Switch({
       className={cn(
         'relative h-6 w-[42px] shrink-0 rounded-full',
         'transition-colors duration-150 ease-[var(--ease-out)]',
-        checked ? 'bg-accent' : 'bg-line'
+        checked ? 'bg-ink' : 'bg-line'
       )}
     >
       <span
         className={cn(
-          'absolute left-0 top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm',
+          'absolute left-0 top-[3px] h-[18px] w-[18px] rounded-full bg-surface shadow-sm ring-1 ring-ink/20',
           'transition-transform duration-150 ease-[var(--ease-out)]',
           checked ? 'translate-x-[21px]' : 'translate-x-[3px]'
         )}
@@ -179,20 +179,13 @@ export function Row({
 export function Mark({ size = 28 }: { size?: number }) {
   return (
     <span
-      className="inline-flex items-center justify-center rounded-[9px] bg-[linear-gradient(135deg,#1d9bf0,#0b1220)] text-white shadow-sm"
+      className="inline-flex items-center justify-center rounded-[9px] bg-ink text-surface"
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      <svg viewBox="0 0 128 128" width={size * 0.62} height={size * 0.62} fill="none">
-        <rect x="20" y="18" width="88" height="58" rx="12" fill="#fff" />
-        <path d="M54 32 80 47 54 62Z" fill="#0b1220" />
-        <path
-          d="M64 86v18M52 93l12 12 12-12"
-          stroke="#fff"
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+      <svg viewBox="0 0 128 128" width={size * 0.66} height={size * 0.66} fill="none">
+        <path d="M47 33 86 55 47 77Z" fill="currentColor" />
+        <path d="M31 92h66" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
       </svg>
     </span>
   );

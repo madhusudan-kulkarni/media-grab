@@ -3,7 +3,7 @@ import type { ScrapedMedia } from '~/utils/media';
 import type { VideoQuality } from '~/utils/storage';
 import { settings } from '~/utils/storage';
 import { countMedia, storeGalleryPayload } from '~/utils/gallery';
-import { Button, cn, Mark, Row, Select, Switch } from '~/ui/primitives';
+import { Button, Mark, Row, Select, Switch } from '~/ui/primitives';
 
 const COLLECT_TIMEOUT = 4000;
 
@@ -128,11 +128,15 @@ export default function Popup() {
               </span>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {counts.images > 0 && <Stat color="bg-accent" label={`${counts.images} images`} />}
-              {counts.videos > 0 && <Stat color="bg-[#8b5cf6]" label={`${counts.videos} videos`} />}
-              {counts.gifs > 0 && <Stat color="bg-success" label={`${counts.gifs} GIFs`} />}
-            </div>
+            <p className="m-0 mt-2.5 text-[11.5px] font-medium text-ink-soft">
+              {[
+                counts.images > 0 && plural(counts.images, 'image'),
+                counts.videos > 0 && plural(counts.videos, 'video'),
+                counts.gifs > 0 && plural(counts.gifs, 'GIF'),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
 
             {tabTitle && (
               <p className="m-0 mt-2.5 truncate text-[11px] text-ink-soft" title={tabTitle}>
@@ -244,13 +248,8 @@ export default function Popup() {
   );
 }
 
-function Stat({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-0.5 text-[10.5px] font-medium text-ink-soft">
-      <span className={cn('h-1.5 w-1.5 rounded-full', color)} />
-      {label}
-    </span>
-  );
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

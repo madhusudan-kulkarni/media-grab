@@ -193,11 +193,11 @@ export default function Gallery() {
             </h1>
             <p className="m-0 text-[11px] text-ink-soft">
               {plural(counts.images, 'image')} · {plural(counts.videos, 'video')} · {plural(counts.gifs, 'GIF')}
-              {savedCount > 0 && <span className="text-success"> · {savedCount} already saved</span>}
+              {savedCount > 0 && <span className="text-ink-soft"> · {savedCount} already saved</span>}
               {sourceUrl && (
                 <>
                   {' · '}
-                  <a href={sourceUrl} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-accent hover:underline">
+                  <a href={sourceUrl} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-ink hover:underline">
                     open source
                   </a>
                 </>
@@ -223,7 +223,7 @@ export default function Gallery() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search media"
-              className="h-9 w-52 rounded-lg border border-line bg-surface-2 pl-8 pr-3 text-[12px] text-ink outline-none transition-colors duration-150 placeholder:text-ink-soft/70 focus:border-accent"
+              className="h-9 w-52 rounded-lg border border-line bg-surface-2 pl-8 pr-3 text-[12px] text-ink outline-none transition-colors duration-150 placeholder:text-ink-soft/70 focus:border-ink"
             />
           </label>
 
@@ -247,11 +247,11 @@ export default function Gallery() {
         </div>
 
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-5 pb-2 text-[11.5px]">
-          <button type="button" onClick={selectAll} className="font-medium hover:text-accent">
+          <button type="button" onClick={selectAll} className="font-medium hover:text-ink">
             Select all
           </button>
           <span className="h-3 w-px bg-line" />
-          <button type="button" onClick={clearSelection} className="font-medium hover:text-accent">
+          <button type="button" onClick={clearSelection} className="font-medium hover:text-ink">
             Clear
           </button>
           <span className="ml-auto text-ink-soft">
@@ -273,7 +273,7 @@ export default function Gallery() {
                 key={item.id}
                 className={cn(
                   'group relative overflow-hidden rounded-xl border bg-surface transition-shadow duration-200',
-                  isSelected ? 'border-accent/70' : 'border-line hover:shadow-[var(--shadow-soft)]'
+                  isSelected ? 'border-ink/70' : 'border-line hover:shadow-[var(--shadow-soft)]'
                 )}
               >
                 <button
@@ -307,13 +307,13 @@ export default function Gallery() {
                     ) : null}
 
                     {isSaved && (
-                      <span className="absolute bottom-2 left-2 rounded bg-success/90 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white">
+                      <span className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white">
                         saved
                       </span>
                     )}
 
                     {disabled && (
-                      <span className="absolute inset-x-2 bottom-2 rounded bg-danger/90 px-2 py-1 text-[10px] font-semibold text-white">
+                      <span className="absolute inset-x-2 bottom-2 rounded border border-white/20 bg-black/75 px-2 py-1 text-[10px] font-medium text-white">
                         HLS only — 2.1
                       </span>
                     )}
@@ -329,7 +329,7 @@ export default function Gallery() {
                   className={cn(
                     'absolute right-2 top-2 grid h-[22px] w-[22px] place-items-center rounded-md border transition-colors duration-150',
                     isSelected
-                      ? 'border-accent bg-accent text-white'
+                      ? 'border-ink bg-ink text-surface'
                       : 'border-white/70 bg-black/35 text-transparent hover:bg-black/55'
                   )}
                 >
@@ -345,7 +345,7 @@ export default function Gallery() {
                     </p>
                     <p className="m-0 text-[10.5px] text-ink-soft">
                       {item.width && item.height ? `${item.width}×${item.height}` : 'size unknown'}
-                      {itemStatus === 'done' && <span className="text-success"> · saved</span>}
+                      {itemStatus === 'done' && <span> · saved</span>}
                       {itemStatus === 'error' && <span className="text-danger"> · failed</span>}
                       {itemStatus === 'queued' && ' · working…'}
                     </p>

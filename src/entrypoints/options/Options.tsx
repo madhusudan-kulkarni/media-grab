@@ -86,7 +86,7 @@ export default function Options() {
             <span
               className={cn(
                 'inline-flex items-center gap-1.5 text-[11.5px] font-medium transition-opacity duration-200',
-                saved ? 'text-success opacity-100' : 'opacity-0'
+                saved ? 'text-ink-soft opacity-100' : 'opacity-0'
               )}
             >
               <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
@@ -105,8 +105,8 @@ export default function Options() {
               hint={granted ? 'MediaGrab can read media on the pages you open.' : 'Scanning and save buttons stay off.'}
             >
               {granted ? (
-                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-soft">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ink-soft" />
                   Active
                 </span>
               ) : (
@@ -134,7 +134,7 @@ export default function Options() {
                 spellCheck={false}
                 className={cn(
                   'mt-1.5 h-10 w-full rounded-lg border border-line bg-surface px-3 font-mono text-[12.5px]',
-                  'text-ink transition-colors duration-150 focus:border-accent focus:outline-none'
+                  'text-ink transition-colors duration-150 focus:border-ink focus:outline-none'
                 )}
               />
             </label>
@@ -145,7 +145,7 @@ export default function Options() {
                   key={token}
                   type="button"
                   onClick={() => saveTemplate(`${template}${token}`)}
-                  className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-ink-soft transition-colors duration-150 hover:border-accent/40 hover:text-accent active:scale-[0.97]"
+                  className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-ink-soft transition-colors duration-150 hover:border-ink/30 hover:text-ink active:scale-[0.97]"
                 >
                   {token}
                 </button>
