@@ -14,6 +14,7 @@ Save images, GIFs and videos from any page — one at a time or all at once. Bui
 - **Every item in a post.** Multi-video and photo posts open a small menu; multi-photo posts save all images with indexed names.
 - **Batch gallery.** Open the popup, press *Review & save*, filter by type, search, select, preview, and download. ZIP for images; videos download individually so large batches do not blow up memory.
 - **Remembers what you saved.** Already-downloaded media is marked and skipped, with a retry-failed action for the rest.
+- **YouTube, without the arms race.** A small native host drives `yt-dlp` and merges audio with ffmpeg. Set it up once with `pnpm native:install`; see [docs/NATIVE.md](docs/NATIVE.md).
 - **Works off X too.** Scans `<img>`/`srcset`/`<picture>`, CSS backgrounds, canvases, `<video>`/`<source>` and direct media links.
 - **Local only.** No telemetry, no account, no remote code. Media is read from the page you are on; public posts whose API response was missed are resolved through X's public syndication endpoint.
 
@@ -44,6 +45,7 @@ Firefox will ask for site access once. Without it, Firefox MV3 runs no content s
 pnpm test        # vitest, media parsing and variant ranking
 pnpm exec tsc --noEmit
 pnpm icons       # regenerate icons from the SVG source
+pnpm native:install   # install the yt-dlp native host
 ```
 
 Layout:

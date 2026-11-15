@@ -1,6 +1,6 @@
 {
   "name": "mediagrab",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "description": "Save images, GIFs and videos from any page",
   "repository": {
@@ -35,7 +35,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sign:firefox": "wxt zip -b firefox && npx --yes web-ext sign --source-dir output/firefox-mv3 --artifacts-dir output/signed --channel unlisted --api-key \"$FIREFOX_JWT_ISSUER\" --api-secret \"$FIREFOX_JWT_SECRET\"",
-    "updates": "node scripts/write-updates.mjs"
+    "updates": "node scripts/write-updates.mjs",
+    "native:install": "node native/install.mjs",
+    "native:uninstall": "node native/uninstall.mjs"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",

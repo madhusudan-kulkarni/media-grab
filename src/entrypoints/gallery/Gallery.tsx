@@ -132,6 +132,25 @@ export default function Gallery() {
     setNotice(`Retried: ${ok} of ${failed.length} saved.`);
   }
 
+  async function sendToYtdlp(media: ScrapedMedia) {
+    const url = media.tweetId ? `https://x.com/i/status/${media.tweetId}` : media.src;
+    try {
+      const response = await browser.runtime.sendMessage({
+        type: 'mediagrab:ytdlp-start',
+        url,
+        quality: 'best',
+        title,
+      });
+      setNotice(
+        response?.ok
+          ? 'Sent to yt-dlp. You will get a notification when the merge finishes.'
+          : response?.error || 'The yt-dlp helper is not installed.'
+      );
+    } catch {
+      setNotice('The yt-dlp helper is not installed.');
+    }
+  }
+
   async function downloadZip() {
     if (!selectedImages.length) return;
     const images: ScrapedImage[] = selectedImages.map((item) => ({
@@ -351,13 +370,24 @@ export default function Gallery() {
                     </p>
                   </div>
 
-                  <IconButton
-                    label="Download item"
-                    disabled={disabled || itemStatus === 'queued'}
-                    onClick={() => downloadOne(item, 1)}
-                  >
-                    <DownloadIcon />
-                  </IconButton>
+                  {disabled ? (
+                    <button
+                      type="button"
+                      onClick={() => sendToYtdlp(item)}
+                      className="rounded-md border border-line px-1.5 py-1 text-[10px] font-semibold text-ink-soft transition-colors hover:border-ink/30 hover:text-ink"
+                      title="Download this stream with yt-dlp"
+                    >
+                      yt-dlp
+                    </button>
+                  ) : (
+                    <IconButton
+                      label="Download item"
+                      disabled={itemStatus === 'queued'}
+                      onClick={() => downloadOne(item, 1)}
+                    >
+                      <DownloadIcon />
+                    </IconButton>
+                  )}
                 </div>
               </article>
             );
@@ -442,11 +472,12 @@ export default function Gallery() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => downloadOne(preview, 1)}
-                  disabled={preview.unsupported === 'hls-only'}
-                  className="h-8 rounded-lg bg-white px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
+                  onClick={() =>
+                    preview.unsupported === 'hls-only' ? sendToYtdlp(preview) : downloadOne(preview, 1)
+                  }
+                  className="h-8 rounded-lg bg-white px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 active:scale-[0.98]"
                 >
-                  Download
+                  {preview.unsupported === 'hls-only' ? 'Download with yt-dlp' : 'Download'}
                 </button>
               </div>
             </div>

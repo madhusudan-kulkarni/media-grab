@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { settings } from '~/utils/storage';
 import { storeGalleryPayload } from '~/utils/gallery';
 import { recordDownloads } from '~/utils/history';
+import { registerYtdlpBridge } from '~/utils/ytdlp-native';
 import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import {
   capturedToScraped,
@@ -24,6 +25,8 @@ import {
 } from '~/utils/filename';
 
 export default defineBackground(() => {
+  registerYtdlpBridge();
+
   // Register context menus on install / update to prevent duplicate ID errors
   browser.runtime.onInstalled.addListener((details) => {
     setupContextMenus();

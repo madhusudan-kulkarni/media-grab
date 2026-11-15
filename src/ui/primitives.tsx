@@ -102,9 +102,14 @@ export function Switch({
   );
 }
 
-export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({
+  className,
+  wrapperClassName,
+  children,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement> & { wrapperClassName?: string }) {
   return (
-    <span className="relative inline-flex items-center">
+    <span className={cn('relative inline-flex items-center', wrapperClassName)}>
       <select
         className={cn(
           'h-9 appearance-none rounded-lg border border-line bg-surface pl-3 pr-8 text-[12.5px] font-medium',

@@ -4,6 +4,31 @@ All notable changes to **MediaGrab** (formerly ImageGrab) are documented here.
 
 ---
 
+## [2.1.0] - 2026-11-15
+
+### Added
+- **YouTube downloads** through a native messaging host that runs yt-dlp and
+  merges audio with ffmpeg. Setup: `brew install yt-dlp ffmpeg && pnpm native:install`.
+  The extension never extracts YouTube streams itself.
+- **HLS-only X posts** can be handed to the same host from the gallery; the host
+  resolves the post with yt-dlp instead of failing.
+- **YouTube card in the popup** with helper status, quality choice, progress and
+  a saved/failed result.
+- **Settings → YouTube**: output folder, browser cookies for private or
+  age-restricted videos, helper check.
+- Desktop notification when a download finishes or fails.
+- `native/install.mjs`, `native/uninstall.mjs`, protocol tests and
+  [docs/NATIVE.md](docs/NATIVE.md).
+
+### Changed
+- Manifest gains `nativeMessaging` and `notifications`. Firefox will ask to
+  approve them once after the update.
+- Version 2.1.0.
+
+### Notes
+- The host is macOS-only and requires Node 22+, yt-dlp and ffmpeg.
+- Playlists stay disabled on purpose; open a single video.
+
 ## [2.0.0] - 2026-11-15
 
 The image-only extension becomes a media grabber, with X as the first-class target.
