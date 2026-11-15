@@ -49,6 +49,10 @@ export default defineContentScript({
 
         const onMessage = (message: { type?: string }, _sender: unknown, sendResponse: (response: unknown) => void) => {
           if (message.type === 'mediagrab:collect') {
+            // On X the dedicated bridge owns collection; answering here would
+            // race it and lose captured videos.
+            if (/(^|\.)(x|twitter)\.com$/i.test(window.location.hostname)) return;
+
             const items = [
               ...scrapeImages().map(imageToMedia),
               ...scrapeVideos(),
