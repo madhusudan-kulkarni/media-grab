@@ -4,7 +4,7 @@ import type { VideoQuality } from '~/utils/storage';
 import { settings } from '~/utils/storage';
 import { countMedia, storeGalleryPayload } from '~/utils/gallery';
 import { Button, Mark, Row, Select, Switch } from '~/ui/primitives';
-import { isYoutubeUrl } from '~/utils/ytdlp';
+import { isYoutubeUrl, normalizeYoutubeUrl } from '~/utils/ytdlp';
 import type { YtdlpJob, YtdlpPing } from '~/utils/ytdlp';
 import { YoutubeCard } from './YoutubeCard';
 
@@ -28,6 +28,7 @@ export default function Popup() {
 
   const counts = countMedia(items);
   const youtube = isYoutubeUrl(tabUrl);
+  const youtubeVideo = youtube && Boolean(normalizeYoutubeUrl(tabUrl));
   const version = browser.runtime.getManifest().version;
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export default function Popup() {
   }
 
   async function startYoutube() {
-    if (!tabUrl || starting) return;
+    if (!tabUrl || starting || !normalizeYoutubeUrl(tabUrl)) return;
     setStarting(true);
     try {
       const response = await browser.runtime.sendMessage({
@@ -185,6 +186,7 @@ export default function Popup() {
       <section className="px-4 pb-3">
         {youtube ? (
           <YoutubeCard
+            videoPage={Boolean(youtubeVideo)}
             ping={ytdlpPing}
             job={ytdlpJob}
             quality={quality}

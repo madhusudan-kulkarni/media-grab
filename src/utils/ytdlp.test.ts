@@ -40,6 +40,8 @@ describe('normalizeYoutubeUrl', () => {
   });
 
   it('rejects pages without a video id', () => {
+    expect(normalizeYoutubeUrl('https://www.youtube.com/')).toBeNull();
+    expect(normalizeYoutubeUrl('https://www.youtube.com/@somechannel')).toBeNull();
     expect(normalizeYoutubeUrl('https://www.youtube.com/feed/subscriptions')).toBeNull();
     expect(normalizeYoutubeUrl('https://www.youtube.com/watch?v=')).toBeNull();
     expect(normalizeYoutubeUrl('https://x.com/a/status/1')).toBeNull();

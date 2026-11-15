@@ -37,15 +37,21 @@ export default defineContentScript({
         style.textContent = getShadowStyles();
         container.appendChild(style);
 
-        const hoverBtn = createFloatingHoverButton(container, async (src, width, height) => {
-          await browser.runtime.sendMessage({
-            type: 'download-image',
-            src,
-            pageTitle: document.title || '',
-            width,
-            height,
-          });
-        });
+        const hoverBtn = createFloatingHoverButton(
+          container,
+          async (src, width, height) => {
+            await browser.runtime.sendMessage({
+              type: 'download-image',
+              src,
+              pageTitle: document.title || '',
+              width,
+              height,
+            });
+          },
+          async (src) => {
+            return await browser.runtime.sendMessage({ type: 'mediagrab:copy-image', src });
+          }
+        );
 
         const onMessage = (message: { type?: string }, _sender: unknown, sendResponse: (response: unknown) => void) => {
           if (message.type === 'mediagrab:collect') {
@@ -241,77 +247,95 @@ function scrapeImages(): ScrapedImage[] {
    FLOATING HOVER SAVE BUTTON (Zero host DOM mutation)
    ========================================================================== */
 
+const ICON_SAVE = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>`;
+const ICON_COPY = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M16 1H4a2 2 0 0 0-2 2v12h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>`;
+const ICON_CHECK = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M9.6 16.8 5.8 13l-1.4 1.4 5.2 5.2L21 8.2 19.6 6.8z"/></svg>`;
+const ICON_FAIL = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2 1 21h22L12 2Zm0 5.5 7.5 12.5h-15L12 7.5ZM11 10v5h2v-5h-2Zm0 6.5v2h2v-2h-2Z"/></svg>`;
+
 function createFloatingHoverButton(
   root: HTMLElement,
-  onDownload: (src: string, width: number, height: number) => Promise<void>
+  onDownload: (src: string, width: number, height: number) => Promise<void>,
+  onCopy: (src: string) => Promise<{ ok: boolean; error?: string }>
 ) {
-  const btn = document.createElement('button');
-  btn.className = 'ig-floating-btn';
-  btn.title = 'Save Image (MediaGrab)';
-  btn.innerHTML = `
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-    </svg>
-    <span>Save</span>
-  `;
+  const wrap = document.createElement('div');
+  wrap.className = 'ig-hover-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'ig-floating-btn';
+  saveBtn.title = 'Save image (MediaGrab)';
+  saveBtn.innerHTML = `${ICON_SAVE}<span>Save</span>`;
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'ig-floating-btn';
+  copyBtn.title = 'Copy image to clipboard (MediaGrab)';
+  copyBtn.innerHTML = `${ICON_COPY}<span>Copy</span>`;
 
   let currentTarget: { src: string; width: number; height: number } | null = null;
   let isHovered = false;
 
-  btn.addEventListener('mouseenter', () => {
+  wrap.addEventListener('mouseenter', () => {
     isHovered = true;
   });
 
-  btn.addEventListener('mouseleave', () => {
+  wrap.addEventListener('mouseleave', () => {
     isHovered = false;
-    btn.style.opacity = '0';
-    btn.style.pointerEvents = 'none';
+    wrap.classList.remove('visible');
   });
 
-  btn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  saveBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (!currentTarget) return;
 
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="#10b981">
-        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-      </svg>
-      <span>Saved!</span>
-    `;
-
+    saveBtn.innerHTML = `${ICON_CHECK}<span>Saved</span>`;
     try {
       await onDownload(currentTarget.src, currentTarget.width, currentTarget.height);
     } finally {
       setTimeout(() => {
-        btn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-          </svg>
-          <span>Save</span>
-        `;
+        saveBtn.innerHTML = `${ICON_SAVE}<span>Save</span>`;
       }, 1500);
     }
   });
 
-  root.appendChild(btn);
+  copyBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!currentTarget) return;
+
+    copyBtn.disabled = true;
+    copyBtn.innerHTML = `${ICON_COPY}<span>Copying…</span>`;
+    try {
+      const result = await onCopy(currentTarget.src);
+      copyBtn.innerHTML = result.ok
+        ? `${ICON_CHECK}<span>Copied</span>`
+        : `${ICON_FAIL}<span>Failed</span>`;
+      copyBtn.title = result.ok ? 'Copied to clipboard' : result.error || 'Copy failed';
+    } finally {
+      setTimeout(() => {
+        copyBtn.disabled = false;
+        copyBtn.innerHTML = `${ICON_COPY}<span>Copy</span>`;
+        copyBtn.title = 'Copy image to clipboard (MediaGrab)';
+      }, 1500);
+    }
+  });
+
+  wrap.append(saveBtn, copyBtn);
+  root.appendChild(wrap);
 
   return {
     show(target: { src: string; width: number; height: number }, rect: DOMRect) {
       currentTarget = target;
-      btn.style.top = `${Math.max(rect.top + 8, 8)}px`;
-      btn.style.left = `${Math.min(rect.right - 80, window.innerWidth - 86)}px`;
-      btn.style.opacity = '1';
-      btn.style.pointerEvents = 'auto';
+      wrap.style.top = `${Math.max(rect.top + 8, 8)}px`;
+      wrap.style.left = `${Math.min(rect.right - 160, window.innerWidth - 172)}px`;
+      wrap.classList.add('visible');
     },
     hide() {
-      if (!isHovered) {
-        btn.style.opacity = '0';
-        btn.style.pointerEvents = 'none';
-      }
+      if (!isHovered) wrap.classList.remove('visible');
     },
     destroy() {
-      btn.remove();
+      wrap.remove();
     },
   };
 }
@@ -418,8 +442,23 @@ function getShadowStyles(): string {
     }
 
     /* Floating Save Button */
-    .ig-floating-btn {
+    .ig-hover-actions {
       position: fixed;
+      display: flex;
+      gap: 6px;
+      z-index: 2147483646;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+
+    .ig-hover-actions.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .ig-floating-btn {
+      position: static;
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -432,15 +471,22 @@ function getShadowStyles(): string {
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      z-index: 2147483646;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease, transform 0.15s ease, background 0.15s ease;
+      transition: transform 0.15s ease, background 0.15s ease;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     }
     .ig-floating-btn:hover {
-      background: #2563eb;
-      transform: scale(1.04);
+      background: rgba(15, 23, 42, 0.97);
+      transform: translateY(-1px);
+    }
+
+    .ig-floating-btn:active {
+      transform: scale(0.97);
+    }
+
+    .ig-floating-btn:disabled {
+      cursor: default;
+      opacity: 0.75;
     }
     .ig-floating-btn svg {
       flex-shrink: 0;

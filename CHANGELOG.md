@@ -4,6 +4,23 @@ All notable changes to **MediaGrab** (formerly ImageGrab) are documented here.
 
 ---
 
+## [2.2.0] - 2026-11-15
+
+### Added
+- **Copy image to clipboard**, as a real image rather than a URL. Three entry
+  points: right-click → *MediaGrab: Copy Image*, the hover pill over any image,
+  and the gallery/preview. Pastes into an agent, editor or chat.
+- Non-video YouTube pages (home, search, channel) now say "Open a video to
+  download it" instead of offering a button that cannot work.
+
+### Changed
+- New `clipboardWrite` permission. Firefox will ask to approve it once after
+  the update.
+- Copying uses Firefox's `clipboard.setImageData`; PNG and JPEG are copied
+  directly, other formats are re-encoded through a canvas (GIFs become their
+  first frame).
+- Version 2.2.0.
+
 ## [2.1.0] - 2026-11-15
 
 ### Added
