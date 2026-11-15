@@ -1,6 +1,7 @@
 import { settings } from '~/utils/storage';
 import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import { getFileExtension, getOriginalName } from '~/utils/filename';
+import { imageToMedia, scrapeVideos } from '~/utils/dom-media';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -70,10 +71,20 @@ export default defineContentScript({
           });
         });
 
-        const onMessage = (message: { type?: string }) => {
+        const onMessage = (message: { type?: string }, _sender: unknown, sendResponse: (response: unknown) => void) => {
           if (message.type === 'open-batch-modal') {
             const images = scrapeImages();
             modal.open(images);
+            return;
+          }
+
+          if (message.type === 'mediagrab:collect') {
+            const items = [
+              ...scrapeImages().map(imageToMedia),
+              ...scrapeVideos(),
+            ];
+            sendResponse({ ok: true, items });
+            return true;
           }
         };
 

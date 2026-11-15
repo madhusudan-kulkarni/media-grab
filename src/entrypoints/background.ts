@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { settings } from '~/utils/storage';
+import { storeGalleryPayload } from '~/utils/gallery';
 import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import {
   capturedToScraped,
@@ -37,7 +38,7 @@ export default defineBackground(() => {
     if (command === 'open-batch-modal') {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
-        await openBatchModalOnTab(tab.id);
+        await openGalleryOnTab(tab.id);
       }
     }
   });
@@ -56,7 +57,7 @@ export default defineBackground(() => {
     }
 
     if (info.menuItemId === 'fast-save-image-batch' && tab?.id) {
-      await openBatchModalOnTab(tab.id);
+      await openGalleryOnTab(tab.id);
     }
   });
 
@@ -87,7 +88,7 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'open-batch-modal' && typeof message.tabId === 'number') {
-      openBatchModalOnTab(message.tabId).then(() => {
+      openGalleryOnTab(message.tabId).then(() => {
         sendResponse({ ok: true });
       }).catch((err) => {
         sendResponse({ ok: false, error: String(err) });
@@ -407,23 +408,38 @@ async function downloadBatchIndividual(
   return { ok: true, count: images.length };
 }
 
-async function openBatchModalOnTab(tabId: number): Promise<void> {
+async function openGalleryOnTab(tabId: number): Promise<void> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  let items: ScrapedMedia[] = [];
+
+  const collect = async (): Promise<ScrapedMedia[]> => {
+    const response = await browser.tabs.sendMessage(tabId, { type: 'mediagrab:collect' });
+    return response?.ok ? (response.items as ScrapedMedia[]) : [];
+  };
+
   try {
-    await browser.tabs.sendMessage(tabId, { type: 'open-batch-modal' });
-    return;
+    items = await collect();
   } catch {
-    // Content script may need dynamic injection for tabs loaded prior to extension install
+    // Content scripts may be missing on tabs loaded before install.
   }
 
-  try {
-    await browser.scripting.executeScript({
-      target: { tabId },
-      files: ['/content-scripts/image-scraper.js'],
-    });
-
-    await browser.tabs.sendMessage(tabId, { type: 'open-batch-modal' });
-  } catch (err) {
-    console.error('Could not inject or message content script:', err);
-    throw err;
+  if (!items.length) {
+    try {
+      await browser.scripting.executeScript({
+        target: { tabId },
+        files: ['/content-scripts/image-scraper.js'],
+      });
+      items = await collect();
+    } catch (err) {
+      console.error('Could not collect media from tab:', err);
+    }
   }
+
+  await storeGalleryPayload({
+    items,
+    title: tab?.title,
+    url: tab?.url,
+    createdAt: Date.now(),
+  });
+  await browser.tabs.create({ url: browser.runtime.getURL('/gallery.html') });
 }

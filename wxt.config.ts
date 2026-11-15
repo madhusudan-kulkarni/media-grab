@@ -8,6 +8,12 @@ export default defineConfig({
   vite: () => ({
     plugins: [react()],
   }),
+  hooks: {
+    'build:manifestGenerated': (_wxt, manifest) => {
+      // WXT forces the small options window; this page is a full settings view.
+      if (manifest.options_ui) manifest.options_ui.open_in_tab = true;
+    },
+  },
   zip: {
     artifactTemplate: '{{name}}-{{browser}}.zip',
   },
@@ -40,6 +46,10 @@ export default defineConfig({
         48: 'icon-48.png',
         128: 'icon-128.png',
       },
+    },
+    options_ui: {
+      open_in_tab: true,
+      page: 'options.html',
     },
     icons: {
       16: 'icon-16.png',

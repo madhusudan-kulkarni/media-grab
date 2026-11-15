@@ -478,7 +478,35 @@ export default defineContentScript({
        Popup bridge
        ------------------------------------------------------------------ */
 
+    async function collectAll(): Promise<ScrapedMedia[]> {
+      const q = await quality();
+      const out = new Map<string, ScrapedMedia>();
+      const add = (media: ScrapedMedia) => {
+        if (media.src && !out.has(media.src)) out.set(media.src, media);
+      };
+
+      for (const item of [...videosByTweet.values()].flat()) add(capturedToScraped(item, q));
+      for (const item of [...photosByTweet.values()].flat()) add(capturedToScraped(item, q));
+
+      // Photos already rendered but not present in a captured response.
+      document.querySelectorAll('article').forEach((article) => {
+        const media = articleMedia(article);
+        const info = tweetInfoFromArticle(article);
+        if (!media || !info) return;
+        media.images.forEach((url) => add(photoToScraped(url, info)));
+      });
+
+      return Array.from(out.values());
+    }
+
     browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type === 'mediagrab:collect') {
+        collectAll()
+          .then((items) => sendResponse({ ok: true, items }))
+          .catch((error) => sendResponse({ ok: false, error: String(error) }));
+        return true;
+      }
+
       if (message?.type !== 'mediagrab:get-media') return;
 
       (async () => {
