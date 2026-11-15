@@ -23,19 +23,12 @@ export default defineConfig({
     permissions: ['downloads', 'contextMenus', 'activeTab', 'scripting', 'storage'],
     host_permissions: ['<all_urls>'],
     commands: {
-      'open-batch-modal': {
+      'open-gallery': {
         suggested_key: {
           default: 'Alt+Shift+I',
           mac: 'Alt+Shift+I',
         },
-        description: 'Open MediaGrab Batch Downloader',
-      },
-      'toggle-select-mode': {
-        suggested_key: {
-          default: 'Alt+Shift+S',
-          mac: 'Alt+Shift+S',
-        },
-        description: 'Toggle MediaGrab selection mode',
+        description: 'Open the MediaGrab gallery for this page',
       },
     },
     action: {

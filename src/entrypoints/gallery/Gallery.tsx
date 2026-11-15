@@ -3,6 +3,7 @@ import type { ScrapedMedia } from '~/utils/media';
 import type { ScrapedImage } from '~/utils/storage';
 import { getOriginalName } from '~/utils/filename';
 import { countMedia, loadGalleryPayload } from '~/utils/gallery';
+import { getHistory, mediaKey } from '~/utils/history';
 
 type Filter = 'all' | 'image' | 'gif' | 'video';
 type ItemStatus = 'idle' | 'queued' | 'done' | 'error';
@@ -25,15 +26,25 @@ export default function Gallery() {
   const [status, setStatus] = useState<Record<string, ItemStatus>>({});
   const [preview, setPreview] = useState<ScrapedMedia | null>(null);
   const [notice, setNotice] = useState('');
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
-      const payload = await loadGalleryPayload();
+      const [payload, history] = await Promise.all([loadGalleryPayload(), getHistory()]);
+      const saved = new Set(history.map((entry) => entry.key));
+      setSavedKeys(saved);
+
       if (payload) {
         setItems(payload.items);
         setTitle(payload.title || '');
         setSourceUrl(payload.url || '');
-        setSelected(new Set(payload.items.filter((item) => !item.unsupported).map((item) => item.id)));
+        setSelected(
+          new Set(
+            payload.items
+              .filter((item) => !item.unsupported && !saved.has(mediaKey(item.src)))
+              .map((item) => item.id)
+          )
+        );
       }
       setLoading(false);
     })();
@@ -57,6 +68,7 @@ export default function Gallery() {
   const counts = countMedia(items);
   const selectedVisible = visible.filter((item) => selected.has(item.id) && !item.unsupported);
   const selectedImages = selectedVisible.filter((item) => item.kind === 'image');
+  const failed = visible.filter((item) => status[item.id] === 'error');
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -101,6 +113,17 @@ export default function Gallery() {
       await sleep(150);
     }
     setNotice(`Finished: ${ok} of ${selectedVisible.length} saved.`);
+  }
+
+  async function retryFailed() {
+    if (!failed.length) return;
+    setNotice(`Retrying ${failed.length}…`);
+    let ok = 0;
+    for (let i = 0; i < failed.length; i++) {
+      if (await downloadOne(failed[i]!, i + 1)) ok++;
+      await sleep(150);
+    }
+    setNotice(`Retried: ${ok} of ${failed.length} saved.`);
   }
 
   async function downloadZip() {
@@ -208,6 +231,7 @@ export default function Gallery() {
           {visible.map((item) => {
             const isSelected = selected.has(item.id);
             const itemStatus = status[item.id] || 'idle';
+            const isSaved = savedKeys.has(mediaKey(item.src));
             return (
               <article
                 key={item.id}
@@ -246,6 +270,12 @@ export default function Gallery() {
                         {formatDuration(item.durationMs)}
                       </span>
                     ) : null}
+
+                    {isSaved && (
+                      <span className="absolute bottom-2 left-2 rounded bg-success/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        saved
+                      </span>
+                    )}
 
                     {item.unsupported === 'hls-only' && (
                       <span className="absolute inset-x-2 bottom-2 rounded bg-danger/90 px-2 py-1 text-[10px] font-semibold text-white">
@@ -302,6 +332,15 @@ export default function Gallery() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <p className="m-0 text-[12px] text-ink-soft">{notice || `${selectedVisible.length} selected`}</p>
           <div className="flex items-center gap-2">
+            {failed.length > 0 && (
+              <button
+                type="button"
+                onClick={retryFailed}
+                className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-1.5 text-[12px] font-semibold text-danger"
+              >
+                Retry failed ({failed.length})
+              </button>
+            )}
             <button
               type="button"
               onClick={downloadZip}

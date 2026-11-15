@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { settings } from '~/utils/storage';
 import { storeGalleryPayload } from '~/utils/gallery';
+import { recordDownloads } from '~/utils/history';
 import type { ScrapedImage, BatchDownloadMode, HoverKeyModifier } from '~/utils/storage';
 import {
   capturedToScraped,
@@ -8,6 +9,10 @@ import {
   syndicationEndpoint,
 } from '~/utils/media';
 import type { ScrapedMedia, VideoQuality } from '~/utils/media';
+
+const ZIP_MAX_FILES = 500;
+const ZIP_MAX_BYTES = 500 * 1024 * 1024;
+const ZIP_DATA_URL_LIMIT = 32 * 1024 * 1024;
 import {
   formatFilename,
   getTimestamp,
@@ -35,7 +40,7 @@ export default defineBackground(() => {
 
   // Keyboard shortcut listener
   browser.commands?.onCommand?.addListener(async (command) => {
-    if (command === 'open-batch-modal') {
+    if (command === 'open-gallery') {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
         await openGalleryOnTab(tab.id);
@@ -87,7 +92,7 @@ export default defineBackground(() => {
       return true;
     }
 
-    if (message.type === 'open-batch-modal' && typeof message.tabId === 'number') {
+    if (message.type === 'mediagrab:open-gallery' && typeof message.tabId === 'number') {
       openGalleryOnTab(message.tabId).then(() => {
         sendResponse({ ok: true });
       }).catch((err) => {
@@ -172,7 +177,7 @@ function setupContextMenus() {
     browser.contextMenus.create(
       {
         id: 'fast-save-image-batch',
-        title: 'MediaGrab: Save Page Images',
+        title: 'MediaGrab: Open Gallery for This Page',
         contexts: ['page', 'image'],
       },
       () => {
@@ -212,6 +217,8 @@ async function downloadImage(
     filename,
     saveAs: false,
   });
+
+  await recordDownloads([{ url: src, filename, kind: 'image' }]);
 }
 
 async function downloadMedia(
@@ -254,6 +261,8 @@ async function downloadMedia(
     conflictAction: 'uniquify',
   });
 
+  await recordDownloads([{ url: media.src, filename, kind: media.kind }]);
+
   return { ok: true };
 }
 
@@ -294,6 +303,10 @@ async function downloadBatchZip(
     return { ok: true, count: 0 };
   }
 
+  if (images.length > ZIP_MAX_FILES) {
+    throw new Error(`ZIP is limited to ${ZIP_MAX_FILES} images. Download this batch individually instead.`);
+  }
+
   const zip = new JSZip();
   const template = await settings.filenameTemplate.getValue();
   const domain = extractDomain(images[0]?.src || '');
@@ -306,6 +319,8 @@ async function downloadBatchZip(
   });
 
   let addedCount = 0;
+  let totalBytes = 0;
+  const saved: Array<{ url: string; filename: string }> = [];
 
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
@@ -326,12 +341,22 @@ async function downloadBatchZip(
 
     const bufferObj = await fetchImageBuffer(img.src);
     if (bufferObj) {
+      const size = bufferObj.isBase64
+        ? Math.ceil(String(bufferObj.data).length * 0.75)
+        : (bufferObj.data as ArrayBuffer).byteLength;
+
+      if (totalBytes + size > ZIP_MAX_BYTES) {
+        throw new Error('ZIP is limited to 500 MB. Download this batch individually instead.');
+      }
+
       if (bufferObj.isBase64) {
         zip.file(filename, bufferObj.data as string, { base64: true });
       } else {
         zip.file(filename, bufferObj.data as ArrayBuffer);
       }
+      totalBytes += size;
       addedCount++;
+      saved.push({ url: img.src, filename });
     }
   }
 
@@ -339,15 +364,33 @@ async function downloadBatchZip(
     throw new Error('Could not fetch any of the selected images for ZIP bundling.');
   }
 
-  // Generate base64 data url for browser.downloads.download compatibility across MV3
-  const zipBase64 = await zip.generateAsync({ type: 'base64' });
-  const zipDataUrl = `data:application/zip;base64,${zipBase64}`;
+  const blob = await zip.generateAsync({ type: 'blob' });
+
+  let downloadUrl: string;
+  let revoke = false;
+
+  if (typeof URL.createObjectURL === 'function') {
+    downloadUrl = URL.createObjectURL(blob);
+    revoke = true;
+  } else {
+    if (blob.size > ZIP_DATA_URL_LIMIT) {
+      throw new Error('ZIP is too large for this browser. Download the batch individually instead.');
+    }
+    const base64 = await zip.generateAsync({ type: 'base64' });
+    downloadUrl = `data:application/zip;base64,${base64}`;
+  }
 
   await browser.downloads.download({
-    url: zipDataUrl,
+    url: downloadUrl,
     filename: zipFilename,
     saveAs: false,
   });
+
+  if (revoke) {
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 60_000);
+  }
+
+  await recordDownloads(saved.map((entry) => ({ ...entry, kind: 'image' })));
 
   return { ok: true, count: addedCount };
 }
@@ -372,6 +415,7 @@ async function downloadBatchIndividual(
   });
 
   const folderPrefix = batchSubfolder ? folderPath : '';
+  const saved: Array<{ url: string; filename: string }> = [];
 
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
@@ -398,12 +442,15 @@ async function downloadBatchIndividual(
         filename,
         saveAs: false,
       });
+      saved.push({ url: img.src, filename });
       // Small throttle delay between downloads
       await new Promise((resolve) => setTimeout(resolve, 150));
     } catch (e) {
       console.warn('Failed to download image in batch:', img.src, e);
     }
   }
+
+  await recordDownloads(saved.map((entry) => ({ ...entry, kind: 'image' })));
 
   return { ok: true, count: images.length };
 }

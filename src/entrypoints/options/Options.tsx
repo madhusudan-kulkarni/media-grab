@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { VideoQuality } from '~/utils/storage';
 import { settings } from '~/utils/storage';
+import { clearHistory, getHistory } from '~/utils/history';
 
 const DEFAULT_TEMPLATE = '${domain}_${timestamp}_${index}.${ext}';
 
@@ -13,6 +14,7 @@ export default function Options() {
   const [subfolder, setSubfolder] = useState(true);
   const [granted, setGranted] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [historyCount, setHistoryCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -22,6 +24,7 @@ export default function Options() {
       setActionButton(await settings.xActionButton.getValue());
       setSubfolder(await settings.batchSubfolder.getValue());
       setGranted(await browser.permissions.contains({ origins: ['<all_urls>'] }).catch(() => true));
+      setHistoryCount((await getHistory()).length);
     })();
   }, []);
 
@@ -137,6 +140,23 @@ export default function Options() {
               await settings.xActionButton.setValue(value);
             }}
           />
+        </Section>
+
+        <Section title="History" hint="Used to mark media you already saved and skip it next time.">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[12.5px]">{historyCount} saved item(s) remembered</span>
+            <button
+              type="button"
+              onClick={async () => {
+                await clearHistory();
+                setHistoryCount(0);
+                flashSaved();
+              }}
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] font-semibold"
+            >
+              Clear history
+            </button>
+          </div>
         </Section>
 
         <Section title="Reset" hint="Restores the default filename template.">
