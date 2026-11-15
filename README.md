@@ -1,149 +1,62 @@
-# ImageGrab
+# MediaGrab
 
-<p align="center">
-  <img src="public/icon.svg" width="96" height="96" alt="ImageGrab Logo" />
+Save images, GIFs and videos from any page — one at a time or all at once. Built for X, works anywhere with standard HTML media.
+
+<p>
+  <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/install-guide-1d9bf0" alt="Install guide"></a>
+  <a href="https://github.com/madhusudan-kulkarni/image-grab/releases/latest"><img src="https://img.shields.io/github/v/release/madhusudan-kulkarni/image-grab?display_name=release" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-ISC-blue" alt="License"></a>
 </p>
 
-<p align="center">
-  <strong>Fast, smart, and privacy-first browser extension to capture, inspect, and batch download images from any webpage.</strong>
-</p>
+## What it does
 
-<p align="center">
-  <a href="https://addons.mozilla.org/en-US/firefox/addon/image-grab/"><img src="https://img.shields.io/badge/Firefox_Add--on-Get_ImageGrab-FF7139?style=flat&logo=firefoxbrowser&logoColor=white" alt="Firefox Add-on"></a>
-  <a href="https://github.com/madhusudan-kulkarni/image-grab/releases/latest"><img src="https://img.shields.io/github/v/release/madhusudan-kulkarni/image-grab?display_name=release&logo=github" alt="Release"></a>
-  <a href="https://github.com/madhusudan-kulkarni/image-grab/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/madhusudan-kulkarni/image-grab/ci.yml?branch=main&label=CI" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-ISC-blue.svg" alt="License"></a>
-</p>
+- **One click on X.** A save control in each post's action row, next to share. Videos come down as progressive MP4, GIFs as the silent MP4 X actually serves, photos at original size.
+- **Every item in a post.** Multi-video and photo posts open a small menu; multi-photo posts save all images with indexed names.
+- **Batch gallery.** Open the popup, press *Review & save*, filter by type, search, select, preview, and download. ZIP for images; videos download individually so large batches do not blow up memory.
+- **Remembers what you saved.** Already-downloaded media is marked and skipped, with a retry-failed action for the rest.
+- **Works off X too.** Scans `<img>`/`srcset`/`<picture>`, CSS backgrounds, canvases, `<video>`/`<source>` and direct media links.
+- **Local only.** No telemetry, no account, no remote code. Media is read from the page you are on; public posts whose API response was missed are resolved through X's public syndication endpoint.
 
----
+## Install
 
-## 📖 About ImageGrab
+This is a personal build, not a store listing. See **[docs/INSTALL.md](docs/INSTALL.md)** for Firefox (temporary and unlisted-signed), Chrome, and updates.
 
-**ImageGrab** is a modern, lightweight, and privacy-first browser extension designed to eliminate the frustration of saving images on the web. 
+Short version for development:
 
-Traditional browser saving is painful: you have to right-click individual images one by one, manually rename them, struggle with lazy-loaded image galleries (like Pinterest, Unsplash, or Instagram), and suffer through dozens of intrusive browser download popups when trying to save multiple files.
-
-**ImageGrab solves all of this:**
-* 🎯 **Zero-Friction Single Capture**: Hover over any image to save it instantly with a discreet floating button.
-* 📦 **One-Click ZIP Packaging**: Batch download hundreds of images bundled into a single organized `.zip` file—triggering just **one single download prompt**.
-* 🔄 **Smart Deep Scan**: Auto-scrolls dynamic, infinite-scrolling pages to wake up lazy-loaded images that standard scrapers miss.
-* 🔒 **100% Private & Local**: Zero tracking, zero telemetry, zero analytics, and zero external servers. All DOM parsing, image fetching, and ZIP compression happen strictly inside your browser.
-
----
-
-## ⚡ Installation
-
-### 🦊 Firefox
-Install directly from the official Mozilla Add-ons store:
-👉 **[Get ImageGrab on Firefox Add-ons (AMO)](https://addons.mozilla.org/en-US/firefox/addon/image-grab/)**
-
-### 🌐 Google Chrome & Chromium (Edge, Brave, Opera)
-1. Download `imagegrab-chrome.zip` from the latest **[GitHub Release](https://github.com/madhusudan-kulkarni/image-grab/releases/latest)**.
-2. Unzip the downloaded file to a folder.
-3. Open `chrome://extensions/` (or `edge://extensions/`) and toggle **Developer mode** (top right).
-4. Click **Load unpacked** and select the unzipped folder.
-
----
-
-## ✨ Features
-
-- ⚡ **Instant Hover Capture**: A subtle, non-destructive hover button rendered in isolated Shadow DOM—zero layout shifts or host page DOM pollution. Customize trigger keys (Direct hover, Hold <kbd>Alt</kbd>, or Hold <kbd>Ctrl</kbd>).
-- 📦 **ZIP Batch Downloader**: Select all or specific images and package them into a structured `.zip` archive without browser prompt cascades.
-- 🔄 **Deep Page Scanner**: Automated deep-scrolling engine captures lazy-loaded photos on Pinterest, Unsplash, Reddit, Twitter/X, and Instagram.
-- 🎯 **Multi-Format & Resolution Filters**: Instantly filter by format (`JPG`, `PNG`, `WEBP`, `SVG`, `GIF`, `AVIF`), orientation (`Landscape`, `Portrait`, `Square`), or minimum resolution dimensions.
-- 🔍 **Full-Resolution Lightbox**: Click any image in the batch viewer to inspect full dimensions, file sizes, and high-res previews before saving.
-- 📋 **Card Quick Actions**: Direct 1-click buttons to copy direct image URLs to your clipboard or open full-size images in new tabs.
-- 🏷️ **Dynamic Filename Templating**: Customize your download naming convention with real-time live preview.
-- 📁 **Organized Directory Structure**: Automatically structures downloads into clean, organized subfolders: `ImageGrab/<domain>/<page_title>_<date>/`.
-
----
-
-## 🏷️ Filename Template Tokens
-
-Customize your download naming format in the popup settings:
-
-| Token | Description | Example Output |
-|---|---|---|
-| `${domain}` | Current website domain | `unsplash.com` |
-| `${page_title}` | Sanitized title of the webpage | `nature-wallpapers` |
-| `${original_name}` | Original filename extracted from URL | `photo-sunset` |
-| `${ext}` | Clean file extension | `jpg` / `png` / `webp` |
-| `${timestamp}` | ISO-friendly date & time stamp | `2026-08-22_215811` |
-| `${date}` | Current date formatted as YYYY-MM-DD | `2026-08-22` |
-| `${time}` | Current time formatted as HHMMSS | `215811` |
-| `${index}` | Sequential item index | `1`, `2`, `3` |
-| `${index_00}` | Zero-padded 3-digit sequence index | `001`, `002`, `003` |
-
-*Default Template*: `${domain}_${timestamp}_${index}.${ext}`
-
----
-
-## ⌨️ Keyboard Shortcuts
-
-| Shortcut | Action | Scope |
-|---|---|---|
-| <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd> | Open Batch Downloader modal | Any active webpage |
-| <kbd>Ctrl</kbd> + <kbd>A</kbd> / <kbd>Cmd</kbd> + <kbd>A</kbd> | Toggle Select All / Deselect All | Inside Batch Modal |
-| <kbd>Enter</kbd> | Start ZIP batch download | Inside Batch Modal |
-| <kbd>Esc</kbd> | Close preview lightbox or dismiss modal | Inside Batch Modal |
-
----
-
-## 🛠️ Development & Build
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v20+)
-- [pnpm](https://pnpm.io/) (v10+)
-
-### Setup
 ```bash
-# Clone the repository
-git clone https://github.com/madhusudan-kulkarni/image-grab.git
-cd image-grab
-
-# Install dependencies
 pnpm install
+pnpm dev:firefox      # loads a temporary add-on with hot reload
+pnpm build:firefox    # output/firefox-mv3
+pnpm build            # output/chrome-mv3
 ```
 
-### Development Server
+Firefox will ask for site access once. Without it, Firefox MV3 runs no content scripts at all.
+
+## Limits
+
+- Most X videos top out at 720p; 1080p and HLS-only posts need the 2.1 muxing work.
+- Protected and age-gated posts are not supported. No authentication is bypassed.
+- X changes its markup and payloads; the capture layer plus public fallback exist to absorb that.
+
+## Development
+
 ```bash
-# Run Chrome extension with hot reload
-pnpm dev
-
-# Run Firefox extension with hot reload
-pnpm dev:firefox
+pnpm test        # vitest, media parsing and variant ranking
+pnpm exec tsc --noEmit
+pnpm icons       # regenerate icons from the SVG source
 ```
 
-### Production Build & Packaging
-```bash
-# Build production bundles
-pnpm build
-pnpm build:firefox
+Layout:
 
-# Create distributable release ZIPs
-pnpm zip
-pnpm zip:firefox
+- `src/entrypoints/media-capture.content.ts` — MAIN-world fetch/XHR hook on x.com.
+- `src/entrypoints/x-bridge.content.ts` — isolated bridge, per-post button, media index.
+- `src/entrypoints/image-scraper.content.tsx` — DOM scanning and hover save.
+- `src/entrypoints/popup`, `gallery`, `options` — React surfaces.
+- `src/utils/media.ts` — media model, variant ranking, X payload parsing.
+- `src/utils/history.ts` — saved-media index.
 
-# Submit directly to Mozilla Add-ons (requires API keys)
-FIREFOX_JWT_ISSUER="user:..." FIREFOX_JWT_SECRET="..." pnpm submit:firefox
-```
+Research and the overhaul plan live in [`docs/`](docs/).
 
-Release ZIP artifacts are generated under `.output/`:
-- `.output/imagegrab-chrome.zip` (Chrome Web Store / Chromium)
-- `.output/imagegrab-firefox.zip` (Mozilla Add-ons)
-- `.output/imagegrab-1.1.0-sources.zip` (AMO compliance source archive)
+## License
 
----
-
-## 🔗 Links & Resources
-
-- 🦊 **Firefox Add-on Store**: [addons.mozilla.org/en-US/firefox/addon/image-grab](https://addons.mozilla.org/en-US/firefox/addon/image-grab/)
-- 💻 **GitHub Repository**: [github.com/madhusudan-kulkarni/image-grab](https://github.com/madhusudan-kulkarni/image-grab)
-- 🐛 **Issue Tracker**: [github.com/madhusudan-kulkarni/image-grab/issues](https://github.com/madhusudan-kulkarni/image-grab/issues)
-- 📦 **Releases**: [github.com/madhusudan-kulkarni/image-grab/releases](https://github.com/madhusudan-kulkarni/image-grab/releases)
-
----
-
-## 📄 License
-This project is open-source software licensed under the [ISC License](LICENSE).
-
+ISC.

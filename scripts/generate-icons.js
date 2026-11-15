@@ -5,36 +5,22 @@ import path from 'path';
 const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#1d4ed8" />
+      <stop offset="0%" stop-color="#1d9bf0" />
+      <stop offset="100%" stop-color="#0b1220" />
     </linearGradient>
-    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#f1f5f9" />
-    </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.3" />
-    </filter>
   </defs>
 
-  <!-- Background Card -->
-  <rect x="6" y="6" width="116" height="116" rx="26" fill="url(#bgGrad)" filter="url(#shadow)" />
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#bgGrad)" />
 
-  <!-- Inner Image Frame -->
-  <rect x="22" y="22" width="84" height="60" rx="10" fill="url(#cardGrad)" stroke="#ffffff" stroke-width="2" />
+  <!-- Media frame -->
+  <rect x="24" y="22" width="80" height="56" rx="11" fill="#ffffff" />
 
-  <!-- Sun / Badge in image -->
-  <circle cx="42" cy="40" r="7" fill="#f59e0b" />
+  <!-- Play glyph -->
+  <path d="M54 35 L79 50 L54 65 Z" fill="#0b1220" />
 
-  <!-- Mountain Landscape -->
-  <path d="M26 76 L48 50 L64 66 L78 52 L102 76 Z" fill="#93c5fd" opacity="0.9" />
-  <path d="M42 76 L62 56 L76 70 L86 60 L102 76 Z" fill="#3b82f6" />
-
-  <!-- Download Arrow Container Badge -->
-  <circle cx="64" cy="94" r="22" fill="#0f172a" stroke="#ffffff" stroke-width="3.5" filter="url(#shadow)" />
-  
-  <!-- Download Arrow Glyph -->
-  <path d="M64 83 V101 M56 94 L64 102 L72 94" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Download arrow -->
+  <path d="M64 84 V103 M51 91 L64 104 L77 91" fill="none" stroke="#ffffff" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round" />
 </svg>`;
 
 const outputDirs = [path.resolve('public'), path.resolve('src/public')];

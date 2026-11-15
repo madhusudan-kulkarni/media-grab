@@ -34,7 +34,8 @@
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sign:firefox": "wxt zip -b firefox && web-ext sign --source-dir output/firefox-mv3 --artifacts-dir output/signed --channel unlisted"
+    "sign:firefox": "wxt zip -b firefox && npx --yes web-ext sign --source-dir output/firefox-mv3 --artifacts-dir output/signed --channel unlisted",
+    "updates": "node scripts/write-updates.mjs"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
